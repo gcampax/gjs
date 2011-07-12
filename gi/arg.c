@@ -2372,6 +2372,25 @@ gjs_value_from_g_argument (JSContext  *context,
             return JS_TRUE;
         }
 
+    case GI_TYPE_TAG_ERROR:
+        {
+            /* For now, a GError is just a boxed type. In the future it may become
+               a native JS Error with domain and code properties. See bug 591480 */
+            if (arg->v_pointer) {
+                GIRepository *repo = g_irepository_get_default();
+                GIStructInfo *info = g_irepository_find_by_name(repo, "GLib", "Error");
+                JSObject *obj = gjs_boxed_from_c_struct(context, info, arg->v_pointer,
+                                                        GJS_BOXED_CREATION_NONE);
+                if (obj) {
+                    *value_p = OBJECT_TO_JSVAL(obj);
+                    return JS_TRUE;
+                }
+
+                return JS_FALSE;
+            }
+            return JS_TRUE;
+        }
+
     case GI_TYPE_TAG_INTERFACE:
         {
             jsval value;

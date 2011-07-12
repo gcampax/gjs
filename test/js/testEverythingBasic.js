@@ -234,6 +234,20 @@ function testArrayCallback() {
     assertRaises(function () { Everything.test_array_callback(null) });
 }
 
+function testErrorCallback() {
+    let callback = function(num, error) {
+	if (error) {
+	    assertEquals(Gio.io_error_quark(), error.domain);
+	    assertEquals(Gio.IOErrorEnum.FAILED, error.code);
+	    assertEquals("Some error happened", error.message);
+	}
+
+	return num;
+    };
+			 
+    assertEquals(41, Everything.test_error_callback(callback));
+}
+
 function testCallbackDestroyNotify() {
     let testObj = {
         called: 0,
