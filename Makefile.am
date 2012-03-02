@@ -51,7 +51,8 @@ nobase_gjs_module_include_HEADERS =	\
 	gi/function.h	\
 	gi/keep-alive.h	\
 	gi/interface.h	\
-	gi/gtype.h
+	gi/gtype.h	\
+	gi/gerror.h
 
 noinst_HEADERS +=		\
 	gjs/jsapi-private.h	\
@@ -135,7 +136,8 @@ libgjs_la_SOURCES += \
 	gi/union.c	\
         gi/value.c	\
 	gi/interface.c	\
-	gi/gtype.c
+	gi/gtype.c	\
+	gi/gerror.c
 
 if ENABLE_DTRACE
 gjs_gi_probes.h: gi/gjs_gi_probes.d
