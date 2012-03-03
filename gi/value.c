@@ -33,6 +33,7 @@
 #include "boxed.h"
 #include "union.h"
 #include "gtype.h"
+#include "gerror.h"
 #include <gjs/gjs-module.h>
 #include <gjs/compat.h>
 
@@ -684,7 +685,7 @@ gjs_value_from_g_value_internal(JSContext    *context,
 
         if (gtype == G_TYPE_ERROR) {
             /* special case GError */
-            obj = gjs_error_from_gerror(context, gboxed);
+            obj = gjs_error_from_gerror(context, gboxed, FALSE);
         } else {
             switch (g_base_info_get_type(info)) {
             case GI_INFO_TYPE_BOXED:
