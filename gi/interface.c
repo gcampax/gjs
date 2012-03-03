@@ -186,6 +186,94 @@ static JSFunctionSpec gjs_interface_proto_funcs[] = {
     { NULL }
 };
 
+static JSBool
+interface_constructor_has_instance(JSContext   *context,
+                                   JSObject    *self,
+                                   const jsval *v,
+                                   JSBool      *p_bool)
+{
+    JSObject *proto;
+    jsval v_proto;
+    Interface *priv;
+    GType obj_gtype;
+
+    /* Looking at code, doesn't seem to be possible, but
+       better safe than sorry */
+    if (!JSVAL_IS_OBJECT(*v))
+        return JS_FALSE;
+
+    if (!gjs_object_get_property(context, self,
+                                 "prototype", &v_proto))
+        return JS_FALSE;
+
+    proto = JSVAL_TO_OBJECT(v_proto);
+    priv = priv_from_js(context, proto);
+
+    /* This will go through .constructor as necessary to
+       retrieve the GType for an object */
+    obj_gtype = gjs_gtype_get_actual_gtype(context, JSVAL_TO_OBJECT(*v));
+
+    *p_bool = g_type_is_a(obj_gtype, priv->gtype);
+
+    return JS_TRUE;
+}
+
+static struct JSClass gjs_interface_constructor_class = {
+    "GjsInterfaceConstructor",
+    0, /* flags */
+    JS_PropertyStub,
+    JS_PropertyStub,
+    JS_PropertyStub,
+    JS_StrictPropertyStub,
+    JS_EnumerateStub,
+    JS_ResolveStub,
+    JS_ConvertStub,
+    NULL, /* finalize */
+    NULL, /* reserved */
+    NULL, /* checkAccess */
+    NULL, /* call */
+    NULL, /* construct */
+    NULL, /* xdrInstance */
+    interface_constructor_has_instance,
+};
+
+static JSObject *
+make_custom_constructor(JSContext *context,
+                        JSObject  *prototype)
+{
+    JSObject *retval;
+    jsval v;
+    static gboolean has_class = FALSE;
+
+    if (G_UNLIKELY(!has_class)) {
+        JSObject *global;
+
+        global = gjs_get_import_global(context);
+
+        JS_InitClass(context, global,
+                     NULL, /* parent_proto */
+                     &gjs_interface_constructor_class,
+                     NULL, /* constructor (irrelevant because the class invisible to code) */
+                     0, /* nargs */
+                     NULL, NULL, NULL, NULL);
+
+        has_class = TRUE;
+    }
+
+    retval = JS_NewObject(context, &gjs_interface_constructor_class,
+                          NULL /* proto */, NULL /* parent */);
+
+    /* The first operation is equivalent to rooting retval, as prototype
+       is kept alive by the real constructor */
+    v = OBJECT_TO_JSVAL(retval);
+    JS_SetProperty(context, prototype, "constructor", &v);
+
+    v = OBJECT_TO_JSVAL(prototype);
+    JS_SetProperty(context, retval, "prototype", &v);
+
+    return retval;
+ }
+
 JSBool
 gjs_define_interface_class(JSContext       *context,
                            JSObject        *in_object,
@@ -269,7 +357,19 @@ gjs_define_interface_class(JSContext       *context,
         return FALSE;
     }
 
-    constructor = JSVAL_TO_OBJECT(value);
+    /* HACK HACK HACK HACK!
+       We need the constructor to have a custom JS class to support
+       hasInstance. But we also need another constructor defined by JS_InitClass, to
+       keep prototype and have our resolve hook called.
+       So we first create a dynamic class in the standard way, and then
+       create an instance of our "interface constructor class" and link it
+       to the actual prototype by setting "prototype" and "constructor".
+       The real constructor for the interface is kept in the import global.
+    */
+    constructor = make_custom_constructor(context, prototype);
+    value = OBJECT_TO_JSVAL(constructor);
+    JS_SetProperty(context, in_object, constructor_name, &value);
+
     gjs_define_static_methods(context, constructor, priv->gtype, priv->info);
 
     value = OBJECT_TO_JSVAL(gjs_gtype_create_gtype_wrapper(context, priv->gtype));
