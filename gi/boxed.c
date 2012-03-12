@@ -871,12 +871,87 @@ define_boxed_class_fields (JSContext *context,
         result = JS_DefinePropertyWithTinyId(context, proto, field_name, i,
                                              JSVAL_NULL,
                                              boxed_field_getter, boxed_field_setter,
-                                             JSPROP_PERMANENT | JSPROP_SHARED);
+                                             JSPROP_PERMANENT | JSPROP_SHARED | JSPROP_ENUMERATE);
 
         g_base_info_unref ((GIBaseInfo *)field);
 
         if (!result)
             return JS_FALSE;
+    }
+
+    return JS_TRUE;
+}
+
+static JSBool
+boxed_new_enumerate(JSContext   *context,
+                    JSObject    *obj,
+                    JSIterateOp  iter_op,
+                    jsval       *statep,
+                    jsid        *idp)
+{
+    Boxed *priv;
+
+    priv = priv_from_js(context, obj);
+    if (priv == NULL)
+        return JS_FALSE;
+
+    if (priv->gboxed) {
+        /* we're an instance, so all our properties are defined already */
+        return JS_TRUE;
+    }
+
+    /* prototype, so enumerate methods */
+
+    switch (iter_op) {
+    case JSENUMERATE_INIT:
+        /* init statep, and return the number of properties in idp */
+
+        *statep = JSVAL_ZERO;
+        if (idp) {
+            int n;
+
+            n = g_struct_info_get_n_methods(priv->info);
+            JS_ValueToId(context, INT_TO_JSVAL(n), idp);
+        }
+
+        return JS_TRUE;
+    case JSENUMERATE_NEXT:
+        /* return the next id, according to statep */
+
+        {
+            int i;
+            GIFunctionInfo *method;
+            const char *name;
+            jsval v_name;
+
+            i = JSVAL_TO_INT(*statep);
+            if (i == g_struct_info_get_n_methods(priv->info)) {
+                /* stop iteration */
+                *statep = JSVAL_NULL;
+                return JS_TRUE;
+            }
+
+            method = g_struct_info_get_method(priv->info, i);
+
+            name = g_base_info_get_name(method);
+            if (!gjs_string_from_utf8(context, name, -1, &v_name)) {
+                g_base_info_unref(method);
+
+                return JS_FALSE;
+            }
+
+            JS_ValueToId(context, v_name, idp);
+            g_base_info_unref(method);
+            return JS_TRUE;
+        }
+    case JSENUMERATE_DESTROY:
+        /* nothing to do */
+        return JS_TRUE;
+
+    case JSENUMERATE_INIT_ALL:
+        /* and what's this, now? */
+        /* too bad all spidermonkey code uses EnumerateStub... */
+        return JS_TRUE;
     }
 
     return JS_TRUE;
@@ -897,12 +972,13 @@ static struct JSClass gjs_boxed_class = {
     JSCLASS_HAS_PRIVATE |
     JSCLASS_NEW_RESOLVE |
     JSCLASS_NEW_RESOLVE_GETS_START |
+    JSCLASS_NEW_ENUMERATE |
     JSCLASS_HAS_RESERVED_SLOTS(1),
     JS_PropertyStub,
     JS_PropertyStub,
     JS_PropertyStub,
     JS_StrictPropertyStub,
-    JS_EnumerateStub,
+    (JSEnumerateOp) boxed_new_enumerate,
     (JSResolveOp) boxed_new_resolve, /* needs cast since it's the new resolve signature */
     JS_ConvertStub,
     boxed_finalize,
