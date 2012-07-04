@@ -144,6 +144,74 @@ keep_alive_trace(JSTracer *tracer,
     priv->inside_trace = FALSE;
 }
 
+static char*
+jsobj_to_string(JSContext* cx, JSObject *obj)
+{
+    char* value = NULL;
+
+    if (JS_ObjectIsFunction(cx, obj)) {
+        JSFunction *fn = JS_ValueToFunction(cx, OBJECT_TO_JSVAL(obj));
+        JSString *str;
+
+        str = JS_GetFunctionId(fn);
+        if (str) {
+            value = NULL;
+            gjs_string_to_utf8(cx, STRING_TO_JSVAL(str), &value);
+        } else {
+            value = g_strdup ("anonymous function");
+        }
+    } else {
+	value = g_strdup_printf("[object %s]", JS_GetClass(obj)->name);
+    }
+
+    if (!value)
+        value = g_strdup ("[unknown object]");
+    return value;
+}
+
+static void
+print_foreach(void *key,
+              void *value,
+              void *data)
+{
+    Child *child = value;
+    JSContext *context = data;
+
+    if (child->child != NULL) {
+        char *string;
+
+        string = jsobj_to_string(context, child->child);
+        g_printerr("%p: %s\n", child->child, string);
+
+        g_free(string);
+    }
+}
+
+static JSBool
+print_roots (JSContext *context,
+             unsigned   argc,
+             jsval     *vp)
+{
+    JSObject *obj = JS_THIS_OBJECT(context, vp);
+    KeepAlive *priv;
+
+    JS_BeginRequest(context);
+
+    priv = priv_from_js(context, obj);
+
+    if (priv == NULL) /* prototype */
+        return JS_TRUE;
+
+    g_printerr("**** BEGIN GJS root table dump ****\n");
+    g_hash_table_foreach(priv->children, print_foreach, context);
+    g_printerr("**** END GJS root table dump ****\n");
+
+    JS_SET_RVAL(context, vp, JSVAL_VOID);
+    JS_EndRequest(context);
+
+    return JS_TRUE;
+}
+
 /* The bizarre thing about this vtable is that it applies to both
  * instances of the object, and to the prototype that instances of the
  * class have.
@@ -171,7 +239,8 @@ static JSPropertySpec gjs_keep_alive_proto_props[] = {
 };
 
 static JSFunctionSpec gjs_keep_alive_proto_funcs[] = {
-    { NULL }
+    { "print_roots", (JSNative)print_roots, 0, 0 },
+    { NULL },
 };
 
 JSObject*
