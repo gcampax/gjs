@@ -411,6 +411,7 @@ param_new_internal(JSContext *cx,
     ret = JS_TRUE;
 
     jsval foo = OBJECT_TO_JSVAL(gjs_param_from_g_param(cx, pspec));
+    g_param_spec_unref(pspec);
 
     JS_SET_RVAL(cx, vp, foo);
  out:
