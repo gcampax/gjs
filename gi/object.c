@@ -60,6 +60,13 @@ typedef struct {
     /* the GObjectClass wrapped by this JS Object (only used for
        prototypes) */
     GTypeClass *klass;
+
+    /* TRUE if this object has visible JS state, and
+       thus its lifecycle is managed using toggle references.
+       FALSE if this object just keeps a hard ref on the underlying GObject,
+       and may be finalized at will.
+    */
+    gboolean uses_toggle_ref;
 } ObjectInstance;
 
 typedef struct {
@@ -99,6 +106,8 @@ GJS_DEFINE_PRIV_FROM_JS(ObjectInstance, gjs_object_instance_class)
 static JSObject*       peek_js_obj  (GObject   *gobj);
 static void            set_js_obj   (GObject   *gobj,
                                      JSObject  *obj);
+static void            ensure_uses_toggle_ref (JSContext *context,
+                                                JSObject  *obj);
 
 typedef enum {
     SOME_ERROR_OCCURRED = JS_FALSE,
@@ -327,8 +336,10 @@ object_instance_set_prop(JSContext            *context,
     GParameter param = { NULL, { 0, }};
     JSBool ret = JS_TRUE;
 
-    if (!gjs_get_string_id(context, *id._, &name))
-        return JS_TRUE; /* not resolved, but no error */
+    if (!gjs_get_string_id(context, *id._, &name)) {
+        /* not resolved, but no error */
+        goto set_custom;
+    }
 
     priv = priv_from_js(context, *obj._);
     gjs_debug_jsprop(GJS_DEBUG_GOBJECT,
@@ -348,8 +359,9 @@ object_instance_set_prop(JSContext            *context,
                                        FALSE /* constructing */)) {
     case SOME_ERROR_OCCURRED:
         ret = JS_FALSE;
-    case NO_SUCH_G_PROPERTY:
         goto out;
+    case NO_SUCH_G_PROPERTY:
+        goto set_custom;
     case VALUE_WAS_SET:
         break;
     }
@@ -368,6 +380,14 @@ object_instance_set_prop(JSContext            *context,
  out:
     g_free(name);
     return ret;
+
+ set_custom:
+    /* We need to keep the wrapper alive in order not
+     * to lose custom "expando" properties
+     */
+    ensure_uses_toggle_ref(context, *obj._);
+    g_free(name);
+    return JS_TRUE;
 }
 
 static gboolean
@@ -1123,6 +1143,7 @@ associate_js_gobject (JSContext      *context,
     ObjectInstance *priv;
 
     priv = priv_from_js(context, object);
+    priv->uses_toggle_ref = FALSE;
     priv->gobj = gobj;
 
     g_assert(peek_js_obj(gobj) == NULL);
@@ -1131,6 +1152,18 @@ associate_js_gobject (JSContext      *context,
 #if DEBUG_DISPOSE
     g_object_weak_ref(gobj, wrapped_gobj_dispose_notify, object);
 #endif
+}
+
+static void
+ensure_uses_toggle_ref (JSContext *context,
+                         JSObject  *object)
+{
+    ObjectInstance *priv;
+
+    priv = priv_from_js(context, object);
+
+    if (priv->uses_toggle_ref)
+        return;
 
     /* OK, here is where things get complicated. We want the
      * wrapped gobj to keep the JSObject* wrapper alive, because
@@ -1143,6 +1176,7 @@ associate_js_gobject (JSContext      *context,
      * the wrapper to be garbage collected (and thus unref the
      * wrappee).
      */
+    priv->uses_toggle_ref = TRUE;
     priv->keep_alive = gjs_keep_alive_get_global(context);
     gjs_keep_alive_add_child(context,
                              priv->keep_alive,
@@ -1150,9 +1184,15 @@ associate_js_gobject (JSContext      *context,
                              object,
                              priv);
 
-    g_object_add_toggle_ref(gobj,
+    g_object_add_toggle_ref(priv->gobj,
                             wrapped_gobj_toggle_notify,
                             JS_GetRuntime(context));
+
+    /* We now have both a ref and a toggle ref, we only want the
+     * toggle ref. This may immediately remove the GC root
+     * we just added, since refcount may drop to 1.
+     */
+    g_object_unref(priv->gobj);
 }
 
 static JSBool
@@ -1202,6 +1242,8 @@ object_instance_init (JSContext *context,
          * we're not actually using it, so just let it get collected. Avoiding
          * this would require a non-trivial amount of work.
          * */
+
+        ensure_uses_toggle_ref(context, old_jsobj);
         *object = old_jsobj;
         g_object_unref(gobj); /* We already own a reference */
         gobj = NULL;
@@ -1229,11 +1271,6 @@ object_instance_init (JSContext *context,
 
     if (priv->gobj == NULL)
         associate_js_gobject(context, *object, gobj);
-    /* We now have both a ref and a toggle ref, we only want the
-     * toggle ref. This may immediately remove the GC root
-     * we just added, since refcount may drop to 1.
-     */
-    g_object_unref(gobj);
 
     gjs_debug_lifecycle(GJS_DEBUG_GOBJECT,
                         "JSObject created with GObject %p %s",
@@ -1342,8 +1379,12 @@ object_instance_finalize(JSFreeOp  *fop,
         }
 
         set_js_obj(priv->gobj, NULL);
-        g_object_remove_toggle_ref(priv->gobj, wrapped_gobj_toggle_notify,
-                                   fop->runtime);
+
+        if (priv->uses_toggle_ref)
+            g_object_remove_toggle_ref(priv->gobj, wrapped_gobj_toggle_notify,
+                                       fop->runtime);
+        else
+            g_object_unref(priv->gobj);
         priv->gobj = NULL;
     }
 
@@ -1495,6 +1536,8 @@ real_connect_func(JSContext *context,
                   priv->info ? g_base_info_get_name( (GIBaseInfo*) priv->info) : g_type_name(priv->gtype));
         return JS_FALSE;
     }
+
+    ensure_uses_toggle_ref(context, obj);
 
     /* Best I can tell, there is no way to know if argv[1] is really
      * callable other than to just try it. Checking whether it's a
@@ -2025,9 +2068,6 @@ gjs_object_from_g_object(JSContext    *context,
         g_object_ref_sink(gobj);
         associate_js_gobject(context, obj, gobj);
 
-        /* see the comment in init_object_instance() for this */
-        g_object_unref(gobj);
-
         g_assert(peek_js_obj(gobj) == obj);
     }
 
@@ -2408,6 +2448,10 @@ gjs_object_custom_init(GTypeInstance *instance,
     context = gjs_context_get_native_context(gjs_context);
 
     associate_js_gobject(context, object, G_OBJECT (instance));
+
+    /* Custom JS objects will most likely have visible state, so
+       just do this from the start */
+    ensure_uses_toggle_ref(context, object);
 }
 
 static inline void
