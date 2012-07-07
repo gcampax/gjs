@@ -42,9 +42,8 @@ typedef enum {
 
 typedef struct {
     gint ref_count;
-    JSRuntime *runtime;
     GICallableInfo *info;
-    jsval js_function;
+    GClosure *js_function;
     ffi_cif cif;
     ffi_closure *closure;
     GIScopeType scope;
@@ -56,6 +55,7 @@ GjsCallbackTrampoline* gjs_callback_trampoline_new(JSContext      *context,
                                                    jsval           function,
                                                    GICallableInfo *callable_info,
                                                    GIScopeType     scope,
+                                                   JSObject       *scope_object,
                                                    gboolean        is_vfunc);
 
 void gjs_callback_trampoline_unref(GjsCallbackTrampoline *trampoline);

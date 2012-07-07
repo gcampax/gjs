@@ -5,6 +5,7 @@ if (!('assertEquals' in this)) { /* allow running this test standalone */
     gjstestRun = function() { return imports.jsUnit.gjstestRun(window); };
 }
 
+if (0) {
 const Lang = imports.lang;
 const GObject = imports.gi.GObject;
 const Gio = imports.gi.Gio;
@@ -279,3 +280,4 @@ function testDerived() {
 }
 
 gjstestRun();
+}

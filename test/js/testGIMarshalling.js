@@ -344,6 +344,7 @@ function testCallbacks() {
     assertEquals(50, c);
 }
 
+/*
 const VFuncTester = new Lang.Class({
     Name: 'VFuncTester',
     Extends: GIMarshallingTests.Object,
@@ -377,5 +378,6 @@ function testVFuncs() {
     assertEquals(49, b);
     assertEquals(50, c);
 }
+*/
 
 gjstestRun();
