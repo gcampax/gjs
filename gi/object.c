@@ -2291,6 +2291,7 @@ gjs_register_property(JSContext *cx,
 
     priv = priv_from_js(cx, obj);
     pspec = gjs_g_param_from_param(cx, pspec_js);
+    g_param_spec_ref(pspec);
 
     g_param_spec_set_qdata(pspec, gjs_is_custom_property_quark(), GINT_TO_POINTER(1));
 
