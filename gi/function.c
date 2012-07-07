@@ -29,6 +29,7 @@
 #include "boxed.h"
 #include "union.h"
 #include "gerror.h"
+#include "closure.h"
 #include <gjs/gjs-module.h>
 #include <gjs/compat.h>
 
@@ -78,16 +79,7 @@ gjs_callback_trampoline_unref(GjsCallbackTrampoline *trampoline)
 
     trampoline->ref_count--;
     if (trampoline->ref_count == 0) {
-        JSContext *context;
-
-        context = gjs_runtime_get_context(trampoline->runtime);
-
-        if (!trampoline->is_vfunc) {
-            JS_BeginRequest(context);
-            JS_RemoveValueRoot(context, &trampoline->js_function);
-            JS_EndRequest(context);
-        }
-
+        g_closure_unref(trampoline->js_function);
         g_callable_info_free_closure(trampoline->info, trampoline->closure);
         g_base_info_unref( (GIBaseInfo*) trampoline->info);
         g_free (trampoline->param_types);
@@ -180,7 +172,7 @@ gjs_callback_closure(ffi_cif *cif,
     g_assert(trampoline);
     gjs_callback_trampoline_ref(trampoline);
 
-    context = gjs_runtime_get_context(trampoline->runtime);
+    context = gjs_closure_get_context(trampoline->js_function);
     JS_BeginRequest(context);
 
     n_args = g_callable_info_get_n_args(trampoline->info);
@@ -253,12 +245,11 @@ gjs_callback_closure(ffi_cif *cif,
         this_object = NULL;
     }
 
-    if (!JS_CallFunctionValue(context,
-                              this_object,
-                              trampoline->js_function,
-                              n_jsargs,
-                              jsargs,
-                              &rval)) {
+    if (!gjs_closure_invoke(trampoline->js_function,
+                            this_object,
+                            n_jsargs,
+                            jsargs,
+                            &rval)) {
         goto out;
     }
 
@@ -364,8 +355,6 @@ gjs_callback_closure(ffi_cif *cif,
 
 out:
     if (!success) {
-        gjs_log_exception (context, NULL);
-
         /* Fill in the result with some hopefully neutral value */
         g_callable_info_load_return_type(trampoline->info, &ret_type);
         gjs_g_argument_init_default (context, &ret_type, result);
@@ -396,10 +385,12 @@ gjs_callback_trampoline_new(JSContext      *context,
                             jsval           function,
                             GICallableInfo *callable_info,
                             GIScopeType     scope,
+                            JSObject       *scope_object,
                             gboolean        is_vfunc)
 {
     GjsCallbackTrampoline *trampoline;
     int n_args, i;
+    gboolean should_root;
 
     if (JSVAL_IS_NULL(function)) {
         return NULL;
@@ -409,12 +400,21 @@ gjs_callback_trampoline_new(JSContext      *context,
 
     trampoline = g_slice_new(GjsCallbackTrampoline);
     trampoline->ref_count = 1;
-    trampoline->runtime = JS_GetRuntime(context);
     trampoline->info = callable_info;
     g_base_info_ref((GIBaseInfo*)trampoline->info);
-    trampoline->js_function = function;
-    if (!is_vfunc)
-        JS_AddValueRoot(context, &trampoline->js_function);
+
+    /* The rule is:
+     * - async and call callbacks are rooted
+     * - callbacks in GObjects methods are traced from the GObject
+     *   (and same for vfuncs, which are associated with a GObject prototype)
+     */
+    should_root = scope != GI_SCOPE_TYPE_NOTIFIED || scope_object == NULL;
+    trampoline->js_function = gjs_closure_new(context,
+                                              JSVAL_TO_OBJECT(function),
+                                              g_base_info_get_name((GIBaseInfo*)callable_info),
+                                              should_root);
+    if (!should_root && scope_object)
+        gjs_object_associate_closure(context, scope_object, trampoline->js_function);
 
     /* Analyze param types and directions, similarly to init_cached_function_data */
     n_args = g_callable_info_get_n_args(trampoline->info);
@@ -513,11 +513,14 @@ static JSBool
 gjs_fill_method_instance (JSContext  *context,
                           JSObject   *obj,
                           Function   *function,
-                          GIArgument *out_arg)
+                          GIArgument *out_arg,
+                          gboolean   *is_gobject)
 {
     GIBaseInfo *container = g_base_info_get_container((GIBaseInfo *) function->info);
     GIInfoType type = g_base_info_get_type(container);
     GType gtype = g_registered_type_info_get_g_type ((GIRegisteredTypeInfo *)container);
+
+    *is_gobject = FALSE;
 
     switch (type) {
     case GI_INFO_TYPE_STRUCT:
@@ -553,6 +556,7 @@ gjs_fill_method_instance (JSContext  *context,
             return JS_FALSE;
 
         out_arg->v_pointer = gjs_g_object_from_object(context, obj);
+        *is_gobject = TRUE;
         break;
 
     default:
@@ -599,6 +603,7 @@ gjs_invoke_c_function(JSContext      *context,
     gboolean failed, postinvoke_release_failed;
 
     gboolean is_method;
+    gboolean is_object_method = FALSE;
     GITypeInfo return_info;
     GITypeTag return_tag;
     jsval *return_values = NULL;
@@ -661,7 +666,8 @@ gjs_invoke_c_function(JSContext      *context,
 
     if (is_method) {
         if (!gjs_fill_method_instance(context, obj,
-                                      function, &in_arg_cvalues[0]))
+                                      function, &in_arg_cvalues[0],
+                                      &is_object_method))
             return JS_FALSE;
         ffi_arg_pointers[0] = &in_arg_cvalues[0];
         ++c_arg_pos;
@@ -765,6 +771,7 @@ gjs_invoke_c_function(JSContext      *context,
                                                              value,
                                                              callable_info,
                                                              scope,
+                                                             is_object_method ? obj : NULL,
                                                              FALSE);
                     closure = trampoline->closure;
                     g_base_info_unref(callable_info);

@@ -34,11 +34,13 @@ GClosure*  gjs_closure_new           (JSContext    *context,
                                       JSObject     *callable,
                                       const char   *description,
                                       gboolean      root_function);
-void       gjs_closure_invoke        (GClosure     *closure,
+JSBool     gjs_closure_invoke        (GClosure     *closure,
+                                      JSObject     *this_obj,
                                       int           argc,
                                       jsval        *argv,
                                       jsval        *retval);
 JSRuntime* gjs_closure_get_runtime   (GClosure     *closure);
+JSContext* gjs_closure_get_context   (GClosure     *closure);
 gboolean   gjs_closure_is_valid      (GClosure     *closure);
 JSObject*  gjs_closure_get_callable  (GClosure     *closure);
 

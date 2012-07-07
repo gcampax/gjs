@@ -126,7 +126,7 @@ closure_marshal(GClosure        *closure,
         }
     }
 
-    gjs_closure_invoke(closure, argc, argv, &rval);
+    gjs_closure_invoke(closure, NULL, argc, argv, &rval);
 
     if (return_value != NULL) {
         if (JSVAL_IS_VOID(rval)) {

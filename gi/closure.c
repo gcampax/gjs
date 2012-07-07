@@ -245,14 +245,16 @@ closure_set_invalid(gpointer  data,
     GJS_DEC_COUNTER(closure);
 }
 
-void
+JSBool
 gjs_closure_invoke(GClosure *closure,
+                   JSObject *this_obj,
                    int       argc,
                    jsval    *argv,
                    jsval    *retval)
 {
     Closure *c;
     JSContext *context;
+    JSBool ret;
 
     c = (Closure*) closure;
 
@@ -261,7 +263,7 @@ gjs_closure_invoke(GClosure *closure,
     if (c->obj == NULL) {
         /* We were destroyed; become a no-op */
         c->context = NULL;
-        return;
+        return JS_FALSE;
     }
 
     context = gjs_runtime_get_context(c->runtime);
@@ -273,8 +275,10 @@ gjs_closure_invoke(GClosure *closure,
         gjs_log_exception(context, NULL);
     }
 
+    ret = JS_FALSE;
+
     if (!gjs_call_function_value(context,
-                                 NULL, /* "this" object; NULL is some kind of default presumably */
+                                 this_obj,
                                  OBJECT_TO_JSVAL(c->obj),
                                  argc,
                                  argv,
@@ -292,8 +296,11 @@ gjs_closure_invoke(GClosure *closure,
         gjs_debug_closure("Closure invocation succeeded but an exception was set");
     }
 
+    ret = JS_TRUE;
+
  out:
     JS_EndRequest(context);
+    return ret;
 }
 
 gboolean
@@ -314,6 +321,16 @@ gjs_closure_get_runtime(GClosure *closure)
     c = (Closure*) closure;
 
     return c->runtime;
+}
+
+JSContext*
+gjs_closure_get_context(GClosure *closure)
+{
+    Closure *c;
+
+    c = (Closure*) closure;
+
+    return c->context;
 }
 
 JSObject*
