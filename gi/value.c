@@ -392,8 +392,20 @@ gjs_value_to_g_value_internal(JSContext    *context,
 
         gboxed = NULL;
         if (JSVAL_IS_NULL(value)) {
-            /* nothing to do */
-        } else if (JSVAL_IS_OBJECT(value)) {
+            return JS_TRUE;
+        }
+        /* special case GValue */
+        if (g_type_is_a(gtype, G_TYPE_VALUE)) {
+            GValue nested_gvalue = { 0 };
+
+            if (!gjs_value_to_g_value(context, value, &nested_gvalue))
+                return JS_FALSE;
+
+            g_value_set_boxed(gvalue, &nested_gvalue);
+            return JS_TRUE;
+        }
+
+        if (JSVAL_IS_OBJECT(value)) {
             JSObject *obj;
             obj = JSVAL_TO_OBJECT(value);
 
