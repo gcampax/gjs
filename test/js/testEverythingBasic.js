@@ -414,6 +414,24 @@ function testEnumParam() {
     assertTrue("Enum $gtype enumerable", "$gtype" in Everything.TestEnumUnsigned);
 }
 
+function testGProperty() {
+    let o1 = new GObject.Object(),
+        o2 = new GObject.Object();
+
+    let t1 = new Everything.TestObj({ bare: o1 });
+    assertEquals(o1, t1.bare);
+
+    let t2 = new Everything.TestSubObj();
+    t2.bare = o1;
+    assertEquals(o1, t2.bare);
+
+    t2.set_bare(o2);
+    assertEquals(o2, t2.bare);
+
+    t2.unset_bare();
+    assertNull(t2.bare);
+}
+
 function testSignal() {
     let handlerCounter = 0;
     let o = new Everything.TestObj();
