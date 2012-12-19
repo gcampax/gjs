@@ -119,7 +119,7 @@ static GQuark
 gjs_is_custom_type_quark (void)
 {
     static GQuark val = 0;
-    if (!val)
+    if (G_UNLIKELY (!val))
         val = g_quark_from_static_string ("gjs::custom-type");
 
     return val;
@@ -129,7 +129,7 @@ static GQuark
 gjs_is_custom_property_quark (void)
 {
     static GQuark val = 0;
-    if (!val)
+    if (G_UNLIKELY (!val))
         val = g_quark_from_static_string ("gjs::custom-property");
 
     return val;
@@ -180,7 +180,7 @@ g_type_query_dynamic_safe (GType       type,
     g_type_query(type, query);
 }
 
-static void
+static inline void
 throw_priv_is_null_error(JSContext *context)
 {
     gjs_throw(context,
@@ -299,7 +299,7 @@ object_instance_get_prop(JSContext            *context,
     if (g_param_spec_get_qdata(param, gjs_is_custom_property_quark()))
         goto out;
 
-    if ((param->flags & G_PARAM_READABLE) == 0)
+    if (G_UNLIKELY ((param->flags & G_PARAM_READABLE) == 0))
         goto out;
 
     gjs_debug_jsprop(GJS_DEBUG_GOBJECT,
@@ -345,7 +345,7 @@ object_instance_set_prop(JSContext            *context,
     gjs_debug_jsprop(GJS_DEBUG_GOBJECT,
                      "Set prop '%s' hook obj %p priv %p", name, *obj._, priv);
 
-    if (priv == NULL) {
+    if (G_UNLIKELY (priv == NULL)) {
         /* see the comment in object_instance_get_prop() on this */
         goto out;
     }
@@ -465,7 +465,7 @@ object_instance_new_resolve_no_info(JSContext       *context,
         base_info = g_irepository_find_by_gtype(g_irepository_get_default(),
                                                 interfaces[i]);
 
-        if (base_info == NULL)
+        if (G_UNLIKELY (base_info == NULL))
             continue;
 
         /* An interface GType ought to have interface introspection info */
@@ -476,7 +476,6 @@ object_instance_new_resolve_no_info(JSContext       *context,
         method_info = g_interface_info_find_method(iface_info, name);
 
         g_base_info_unref(base_info);
-
 
         if (method_info != NULL) {
             if (gjs_define_function(context, obj, priv->gtype,
@@ -521,22 +520,9 @@ object_instance_new_resolve(JSContext *context,
 
     *objp = NULL;
 
-    if (!gjs_get_string_id(context, *id, &name))
-        return JS_TRUE; /* not resolved, but no error */
-
     priv = priv_from_js(context, *obj);
 
-    gjs_debug_jsprop(GJS_DEBUG_GOBJECT,
-                     "Resolve prop '%s' hook obj %p priv %p (%s.%s) gobj %p %s",
-                     name,
-                     *obj,
-                     priv,
-                     priv && priv->info ? g_base_info_get_namespace (priv->info) : "",
-                     priv && priv->info ? g_base_info_get_name (priv->info) : "",
-                     priv ? priv->gobj : NULL,
-                     (priv && priv->gobj) ? g_type_name_from_instance((GTypeInstance*) priv->gobj) : "(type unknown)");
-
-    if (priv == NULL) {
+    if (G_UNLIKELY (priv == NULL)) {
         /* We won't have a private until the initializer is called, so
          * just defer to prototype chains in this case.
          *
@@ -545,14 +531,23 @@ object_instance_new_resolve(JSContext *context,
          * will run afterwards will fail because of the "priv == NULL"
          * check there.
          */
-        ret = JS_TRUE;
-        goto out;
+        return JS_TRUE;
     }
 
-    if (priv->gobj != NULL) {
-        ret = JS_TRUE;
-        goto out;
-    }
+    if (priv->gobj != NULL)
+        return JS_TRUE;
+
+    if (!gjs_get_string_id(context, *id, &name))
+        return JS_TRUE; /* not resolved, but no error */
+
+    gjs_debug_jsprop(GJS_DEBUG_GOBJECT,
+                     "Resolve prop '%s' hook obj %p priv %p (%s.%s) gobj %s",
+                     name,
+                     obj,
+                     priv,
+                     priv->info ? g_base_info_get_namespace (priv->info) : "",
+                     priv->info ? g_base_info_get_name (priv->info) : "",
+                     g_type_name_from_instance(priv->gtype));
 
     /* If we have no GIRepository information (we're a JS GObject subclass),
      * we need to look at exposing interfaces. Look up our interfaces through
@@ -1269,12 +1264,12 @@ object_instance_init (JSContext *context,
         /* we should already have a ref */
     }
 
-    if (priv->gobj == NULL)
+    if (G_LIKELY (priv->gobj == NULL))
         associate_js_gobject(context, *object, gobj);
 
     gjs_debug_lifecycle(GJS_DEBUG_GOBJECT,
                         "JSObject created with GObject %p %s",
-                        priv->gobj, g_type_name_from_instance((GTypeInstance*) priv->gobj));
+                        priv->gobj, g_type_name(priv->gtype));
 
     TRACE(GJS_OBJECT_PROXY_NEW(priv, priv->gobj,
                                priv->info ? g_base_info_get_namespace((GIBaseInfo*) priv->info) : "_gjs_private",
@@ -1525,11 +1520,11 @@ real_connect_func(JSContext *context,
 
     priv = priv_from_js(context, obj);
     gjs_debug_gsignal("connect obj %p priv %p argc %d", obj, priv, argc);
-    if (priv == NULL) {
+    if (G_UNLIKELY (priv == NULL)) {
         throw_priv_is_null_error(context);
-        return JS_FALSE; /* wrong class passed in */
+        return JS_FALSE;
     }
-    if (priv->gobj == NULL) {
+    if (G_UNLIKELY (priv->gobj == NULL)) {
         /* prototype, not an instance. */
         gjs_throw(context, "Can't connect to signals on %s.%s.prototype; only on instances",
                   priv->info ? g_base_info_get_namespace( (GIBaseInfo*) priv->info) : "",
@@ -1568,7 +1563,7 @@ real_connect_func(JSContext *context,
     }
 
     closure = gjs_closure_new_for_signal(context, JSVAL_TO_OBJECT(argv[1]), "signal callback", signal_id);
-    if (closure == NULL)
+    if (G_UNLIKELY (closure == NULL))
         goto out;
 
     connect_data = g_slice_new(ConnectData);
@@ -1589,7 +1584,7 @@ real_connect_func(JSContext *context,
         g_signal_handler_disconnect(priv->gobj, id);
         goto out;
     }
-    
+
     JS_SET_RVAL(context, vp, retval);
 
     ret = JS_TRUE;
@@ -1630,12 +1625,12 @@ disconnect_func(JSContext *context,
     priv = priv_from_js(context, obj);
     gjs_debug_gsignal("disconnect obj %p priv %p argc %d", obj, priv, argc);
 
-    if (priv == NULL) {
+    if (G_UNLIKELY (priv == NULL)) {
         throw_priv_is_null_error(context);
         return JS_FALSE; /* wrong class passed in */
     }
 
-    if (priv->gobj == NULL) {
+    if (G_UNLIKELY (priv->gobj == NULL)) {
         /* prototype, not an instance. */
         gjs_throw(context, "Can't disconnect signal on %s.%s.prototype; only on instances",
                   priv->info ? g_base_info_get_namespace( (GIBaseInfo*) priv->info) : "",
@@ -1652,7 +1647,7 @@ disconnect_func(JSContext *context,
     id = JSVAL_TO_INT(argv[0]);
 
     g_signal_handler_disconnect(priv->gobj, id);
-    
+
     JS_SET_RVAL(context, vp, JSVAL_VOID);
 
     return JS_TRUE;
@@ -1683,12 +1678,12 @@ emit_func(JSContext *context,
     priv = priv_from_js(context, obj);
     gjs_debug_gsignal("emit obj %p priv %p argc %d", obj, priv, argc);
 
-    if (priv == NULL) {
+    if (G_UNLIKELY (priv == NULL)) {
         throw_priv_is_null_error(context);
         return JS_FALSE; /* wrong class passed in */
     }
 
-    if (priv->gobj == NULL) {
+    if (G_UNLIKELY (priv->gobj == NULL)) {
         /* prototype, not an instance. */
         gjs_throw(context, "Can't emit signal on %s.%s.prototype; only on instances",
                   priv->info ? g_base_info_get_namespace( (GIBaseInfo*) priv->info) : "",
@@ -1748,11 +1743,11 @@ emit_func(JSContext *context,
         else
             failed = !gjs_value_to_g_value(context, argv[i+1], value);
 
-        if (failed)
+        if (G_UNLIKELY (failed))
             break;
     }
 
-    if (!failed) {
+    if (G_LIKELY (!failed)) {
         g_signal_emitv(instance_and_args, signal_id, signal_detail,
                        &rvalue);
     }
@@ -1772,7 +1767,7 @@ emit_func(JSContext *context,
         g_value_unset(&instance_and_args[i]);
     }
 
-    if (!failed)
+    if (G_LIKELY (!failed))
         JS_SET_RVAL(context, vp, retval);
 
     ret = !failed;
@@ -1796,7 +1791,7 @@ to_string_func(JSContext *context,
 
     priv = priv_from_js(context, obj);
 
-    if (priv == NULL) {
+    if (G_UNLIKELY (priv == NULL)) {
         throw_priv_is_null_error(context);
         goto out;  /* wrong class passed in */
     }
@@ -1845,7 +1840,7 @@ init_func (JSContext *context,
 
     ret = object_instance_init(context, &obj, argc, argv);
 
-    if (ret)
+    if (G_LIKELY (ret))
         JS_SET_RVAL(context, vp, OBJECT_TO_JSVAL(obj));
 
     return ret;
@@ -2060,7 +2055,7 @@ gjs_object_from_g_object(JSContext    *context,
 
         JS_EndRequest(context);
 
-        if (obj == NULL)
+        if (G_UNLIKELY (obj == NULL))
             goto out;
 
         init_object_private(context, obj);
@@ -2102,7 +2097,7 @@ gjs_typecheck_object(JSContext     *context,
 
     priv = priv_from_js(context, object);
 
-    if (priv == NULL) {
+    if (G_UNLIKELY (priv == NULL)) {
         if (throw) {
             gjs_throw(context,
                       "Object instance or prototype has not been properly initialized yet. "
@@ -2112,7 +2107,7 @@ gjs_typecheck_object(JSContext     *context,
         return JS_FALSE;
     }
 
-    if (priv->gobj == NULL) {
+    if (G_UNLIKELY (priv->gobj == NULL)) {
         if (throw) {
             gjs_throw(context,
                       "Object is %s.%s.prototype, not an object instance - cannot convert to GObject*",
@@ -2130,7 +2125,7 @@ gjs_typecheck_object(JSContext     *context,
     else
         result = JS_TRUE;
 
-    if (!result && throw) {
+    if (G_UNLIKELY (!result) && throw) {
         if (priv->info) {
             gjs_throw_custom(context, "TypeError",
                              "Object is of type %s.%s - cannot convert to %s",
@@ -2294,7 +2289,7 @@ gjs_hook_up_vfunc(JSContext *cx,
         g_free(interface_list);
     }
 
-    if (!vfunc) {
+    if (G_UNLIKELY (vfunc == NULL)) {
         gjs_throw(cx, "Could not find definition of virtual function %s", name);
 
         g_free(name);
@@ -2302,7 +2297,7 @@ gjs_hook_up_vfunc(JSContext *cx,
     }
 
     find_vfunc_info(cx, gtype, vfunc, name, &implementor_vtable, &field_info);
-    if (field_info != NULL) {
+    if (G_LIKELY (field_info != NULL)) {
         GITypeInfo *type_info;
         GIBaseInfo *interface_info;
         GICallbackInfo *callback_info;
@@ -2506,7 +2501,7 @@ gjs_register_type(JSContext *cx,
                         "properties", &properties))
         goto out;
 
-    if (!parent)
+    if (G_UNLIKELY (!parent))
         goto out;
 
     if (!do_base_typecheck(cx, parent, JS_TRUE))
@@ -2636,7 +2631,7 @@ gjs_signal_new(JSContext *cx,
     GType *params;
     JSBool ret;
 
-    if (argc != 6)
+    if (G_UNLIKELY (argc != 6))
         return JS_FALSE;
 
     JS_BeginRequest(cx);
