@@ -23,6 +23,10 @@
 
 const Gi = imports._gi;
 
+// Rules for versioning: bump major when making API incompatible changes,
+// bump minor when adding API
+var $API_VERSION = [1, 0];
+
 function countProperties(obj) {
     let count = 0;
     for (let property in obj) {

@@ -24,6 +24,10 @@
 const GLib = imports.gi.GLib;
 const GObject = imports.gi.GObject;
 
+// Rules for versioning: bump major when making API incompatible changes,
+// bump minor when adding API
+var $API_VERSION = [1, 0];
+
 var _mainLoops = {};
 
 function run(name) {
