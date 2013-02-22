@@ -48,3 +48,14 @@ gjs_bindtextdomain(const char *domain,
     /* Always use UTF-8; we assume it internally here */
     bind_textdomain_codeset(domain, "UTF-8");
 }
+
+char *
+gjs_get_libdir(const char *prefix)
+{
+    /* Debian: patch for your favorite style of multi-arch */
+
+    if (sizeof (long) == 8)
+        return g_build_filename (prefix, "lib64", NULL);
+    else
+        return g_build_filename (prefix, "lib", NULL);
+}

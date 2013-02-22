@@ -35,6 +35,9 @@ void gjs_textdomain     (const char *domain);
 void gjs_bindtextdomain (const char *domain,
                          const char *location);
 
+/* For imports.package */
+char * gjs_get_libdir  (const char *prefix);
+
 G_END_DECLS
 
 #endif
