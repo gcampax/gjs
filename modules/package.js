@@ -99,6 +99,7 @@ function init(params) {
     prefix = params.prefix;
     libdir = GjsPrivate.get_libdir(prefix);
     datadir = GLib.build_filenamev([prefix, 'share']);
+    let libpath, girpath;
 
     if (GLib.file_test('./src',
                        GLib.FileTest.IS_DIR)) {
@@ -106,20 +107,24 @@ function init(params) {
         // Running from source directory
         _base = GLib.get_current_dir();
         pkglibdir = GLib.build_filenamev([_base, 'lib']);
+        libpath = GLib.build_filenamev([pkglibdir, '.libs']);
+        girpath = pkglibdir;
         pkgdatadir = GLib.build_filenamev([_base, 'data']);
         localedir = GLib.build_filenamev([_base, 'po']);
         moduledir = GLib.build_filenamev([_base, 'src']);
     } else {
         _base = prefix;
         pkglibdir = GLib.build_filenamev([libdir, name]);
+        libpath = pkglibdir;
+        girpath = GLib.build_filenamev([pkglibdir, 'girepository-1.0']);
         pkgdatadir = GLib.build_filenamev([datadir, name]);
         localedir = GLib.build_filenamev([datadir, 'locale']);
         moduledir = pkgdatadir;
     }
 
     imports.searchPath.push(moduledir);
-    GIRepository.Repository.prepend_search_path(pkglibdir);
-    GIRepository.Repository.prepend_library_path(pkglibdir);
+    GIRepository.Repository.prepend_search_path(girpath);
+    GIRepository.Repository.prepend_library_path(libpath);
 }
 
 /**
@@ -264,8 +269,9 @@ function initSubmodule(name) {
         // Running from source tree, add './name' to search paths
 
         let submoduledir = GLib.build_filenamev([_base, name]);
+        let libpath = GLib.build_filenamev([submoduledir, '.libs']);
         GIRepository.Repository.prepend_search_path(submoduledir);
-        GIRepository.Repository.prepend_library_path(submoduledir);
+        GIRepository.Repository.prepend_library_path(libpath);
     } else {
         // Running installed, submodule is in $(pkglibdir), nothing to do
     }
