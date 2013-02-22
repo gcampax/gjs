@@ -16,7 +16,8 @@ dist_gjsjs_DATA +=		\
 	modules/signals.js	\
 	modules/promise.js	\
 	modules/format.js	\
-	modules/package.js
+	modules/package.js	\
+	modules/params.js
 
 gjsnative_LTLIBRARIES += console.la system.la
 

@@ -175,7 +175,8 @@ function _isGjsModule(name, version) {
     const RECOGNIZED_MODULE_NAMES = ['Lang',
                                      'Mainloop',
                                      'Signals',
-                                     'System'];
+                                     'System',
+                                     'Params'];
     for (let i = 0; i < RECOGNIZED_MODULE_NAMES.length; i++) {
         let module = RECOGNIZED_MODULE_NAMES[i];
 
