@@ -272,6 +272,47 @@ gjs_define_string_array(JSContext   *context,
     return array;
 }
 
+JSObject*
+gjs_define_int_array(JSContext   *context,
+                     JSObject    *in_object,
+                     const char  *array_name,
+                     gssize       array_length,
+                     int         *array_values,
+                     unsigned     attrs)
+{
+    GArray *elems;
+    JSObject *array;
+    int i;
+
+    JS_BeginRequest(context);
+
+    if (!JS_EnterLocalRootScope(context))
+        return JS_FALSE;
+
+    elems = g_array_sized_new(FALSE, FALSE, sizeof(jsval), array_length);
+
+    for (i = 0; i < array_length; ++i) {
+        jsval element;
+        element = INT_TO_JSVAL(array_values[i]);
+        g_array_append_val(elems, element);
+    }
+
+    array = JS_NewArrayObject(context, elems->len, (jsval*) elems->data);
+    g_array_free(elems, TRUE);
+
+    if (array != NULL) {
+        if (!JS_DefineProperty(context, in_object,
+                               array_name, OBJECT_TO_JSVAL(array),
+                               NULL, NULL, attrs))
+            array = NULL;
+    }
+
+    JS_LeaveLocalRootScope(context);
+
+    JS_EndRequest(context);
+    return array;
+}
+
 /**
  * gjs_string_readable:
  *

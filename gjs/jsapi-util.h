@@ -231,6 +231,12 @@ JSObject*   gjs_define_string_array          (JSContext       *context,
                                               gssize           array_length,
                                               const char     **array_values,
                                               unsigned         attrs);
+JSObject*   gjs_define_int_array             (JSContext       *context,
+                                              JSObject        *in_object,
+                                              const char      *array_name,
+                                              gssize           array_length,
+                                              int             *array_values,
+                                              unsigned         attrs);
 void        gjs_throw                        (JSContext       *context,
                                               const char      *format,
                                               ...)  G_GNUC_PRINTF (2, 3);
