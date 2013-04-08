@@ -250,6 +250,7 @@ gjs_keep_alive_new(JSContext *context)
     KeepAlive *priv;
     JSObject *keep_alive;
     JSObject *global;
+    JSBool found;
 
     /* This function creates an unattached KeepAlive object; following our
      * general strategy, we have a single KeepAlive class with a constructor
@@ -265,7 +266,9 @@ gjs_keep_alive_new(JSContext *context)
 
     g_assert(global != NULL);
 
-    if (!gjs_object_has_property(context, global, gjs_keep_alive_class.name)) {
+    if (!JS_HasProperty(context, global, gjs_keep_alive_class.name, &found))
+        return JS_FALSE;
+    if (!found) {
         JSObject *prototype;
 
         gjs_debug(GJS_DEBUG_KEEP_ALIVE,
@@ -296,8 +299,6 @@ gjs_keep_alive_new(JSContext *context)
                                  NULL);
         if (prototype == NULL)
             gjs_fatal("Can't init class %s", gjs_keep_alive_class.name);
-
-        g_assert(gjs_object_has_property(context, global, gjs_keep_alive_class.name));
 
         gjs_debug(GJS_DEBUG_KEEP_ALIVE, "Initialized class %s prototype %p",
                   gjs_keep_alive_class.name, prototype);
