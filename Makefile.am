@@ -57,7 +57,8 @@ nobase_gjs_module_include_HEADERS =	\
 	gi/keep-alive.h	\
 	gi/interface.h	\
 	gi/gtype.h	\
-	gi/gerror.h
+	gi/gerror.h	\
+	gi/arg-cache.h
 
 noinst_HEADERS +=		\
 	gjs/jsapi-private.h	\
@@ -148,7 +149,8 @@ libgjs_la_SOURCES += \
         gi/value.c	\
 	gi/interface.c	\
 	gi/gtype.c	\
-	gi/gerror.c
+	gi/gerror.c	\
+	gi/arg-cache.c
 
 # Also, these files used to be a separate library
 libgjs_private_source_files = \
