@@ -265,4 +265,9 @@ function _init() {
         let nameAndArgs = Array.prototype.slice.call(arguments, 1);
         return GObject.Object.prototype.emit.apply(object, nameAndArgs);
     }
+
+    // Conversely, this one is introspectable, so we implement it in JS
+    this.Object.prototype.disconnect = function(id) {
+        return GObject.signal_handler_disconnect(this, id);
+    }
 }
