@@ -466,10 +466,10 @@ function testSignalAlternativeSyntax()  {
     })
 
     GObject.signal_emit_by_name(o, 'test');
-    assertEquals('handler callled', 1, handlerCounter);
-    assertEquals('Signal handlers gets called with right object', o, theObject);
+    JSUnit.assertEquals('handler callled', 1, handlerCounter);
+    JSUnit.assertEquals('Signal handlers gets called with right object', o, theObject);
     GObject.signal_emit_by_name(o, 'test');
-    assertEquals('disconnected handler not called', 1, handlerCounter);
+    JSUnit.assertEquals('disconnected handler not called', 1, handlerCounter);
 }
 
 function testTortureSignature0() {
