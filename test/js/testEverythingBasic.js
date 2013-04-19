@@ -456,6 +456,24 @@ function testSignalWithStaticScopeArg() {
     assertEquals('signal handler was passed arg as reference', 44, b.some_int);
 }
 
+function testSignalAlternativeSyntax()  {
+    let handlerCounter = 0;
+    let o = new Everything.TestObj();
+    let theObject;
+
+    let handlerId = GObject.signal_connect(o, 'test', function(signalObject) {
+        handlerCounter ++;
+        theObject = signalObject;
+        GObject.signal_handler_disconnect(o, handlerId);
+    })
+
+    GObject.signal_emit_by_name(o, 'test');
+    assertEquals('handler callled', 1, handlerCounter);
+    assertEquals('Signal handlers gets called with right object', o, theObject);
+    GObject.signal_emit_by_name(o, 'test');
+    assertEquals('disconnected handler not called', 1, handlerCounter);
+}
+
 function testTortureSignature0() {
     let [y, z, q] = Everything.test_torture_signature_0(42, 'foo', 7);
     assertEquals(Math.floor(y), 42);
