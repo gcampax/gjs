@@ -61,6 +61,13 @@ GjsCallbackTrampoline* gjs_callback_trampoline_new(JSContext      *context,
 void gjs_callback_trampoline_unref(GjsCallbackTrampoline *trampoline);
 void gjs_callback_trampoline_ref(GjsCallbackTrampoline *trampoline);
 
+typedef struct {
+    jsval     *argv;
+    GArgument *in_arg_cvalues;
+    GArgument *out_arg_cvalues;
+    GArgument *inout_original_arg_cvalues;
+} GjsFunctionCallState;
+
 JSObject* gjs_define_function   (JSContext      *context,
                                  JSObject       *in_object,
                                  GType           gtype,

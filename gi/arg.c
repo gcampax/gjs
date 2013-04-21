@@ -1069,16 +1069,16 @@ throw_invalid_argument(JSContext      *context,
     g_free(display_name);
 }
 
-static JSBool
-gjs_array_to_explicit_array_internal(JSContext       *context,
-                                     jsval            value,
-                                     GITypeInfo      *type_info,
-                                     const char      *arg_name,
-                                     GjsArgumentType  arg_type,
-                                     GITransfer       transfer,
-                                     gboolean         may_be_null,
-                                     gpointer        *contents,
-                                     gsize           *length_p)
+JSBool
+gjs_array_to_explicit_array(JSContext       *context,
+                            jsval            value,
+                            GITypeInfo      *type_info,
+                            const char      *arg_name,
+                            GjsArgumentType  arg_type,
+                            GITransfer       transfer,
+                            gboolean         may_be_null,
+                            gpointer        *contents,
+                            gsize           *length_p)
 {
     JSBool ret = JS_FALSE;
     GITypeInfo *param_info;
@@ -1701,15 +1701,15 @@ gjs_value_to_g_argument(JSContext      *context,
             }
 
         if (!bytearray_fastpath &&
-            !gjs_array_to_explicit_array_internal(context,
-                                                  value,
-                                                  type_info,
-                                                  arg_name,
-                                                  arg_type,
-                                                  transfer,
-                                                  may_be_null,
-                                                  &data,
-                                                  &length)) {
+            !gjs_array_to_explicit_array(context,
+                                         value,
+                                         type_info,
+                                         arg_name,
+                                         arg_type,
+                                         transfer,
+                                         may_be_null,
+                                         &data,
+                                         &length)) {
             wrong = TRUE;
             break;
         }
@@ -1924,28 +1924,6 @@ gjs_value_to_arg(JSContext  *context,
                                    g_arg_info_get_ownership_transfer(arg_info),
                                    g_arg_info_may_be_null(arg_info),
                                    arg);
-}
-
-JSBool
-gjs_value_to_explicit_array (JSContext  *context,
-                             jsval       value,
-                             GIArgInfo  *arg_info,
-                             GArgument  *arg,
-                             gsize      *length_p)
-{
-    GITypeInfo type_info;
-
-    g_arg_info_load_type(arg_info, &type_info);
-
-    return gjs_array_to_explicit_array_internal(context,
-                                                value,
-                                                &type_info,
-                                                g_base_info_get_name((GIBaseInfo*) arg_info),
-                                                GJS_ARGUMENT_ARGUMENT,
-                                                g_arg_info_get_ownership_transfer(arg_info),
-                                                g_arg_info_may_be_null(arg_info),
-                                                &arg->v_pointer,
-                                                length_p);
 }
 
 static JSBool
