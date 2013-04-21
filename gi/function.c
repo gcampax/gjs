@@ -567,7 +567,6 @@ gjs_invoke_c_function(JSContext      *context,
     gboolean is_method;
     gboolean is_object_method = FALSE;
     GITypeTag return_tag;
-    jsval *return_values = NULL;
 
     /* Because we can't free a closure while we're in it, we defer
      * freeing until the next time a C function is invoked.  What
@@ -729,11 +728,8 @@ gjs_invoke_c_function(JSContext      *context,
                                               &state.out_arg_cvalues[-1]);
     }
 
-    if (function->js_out_argc > 0) {
-        return_values = g_newa(jsval, function->js_out_argc);
-        gjs_set_values(context, return_values, function->js_out_argc, JSVAL_VOID);
-        gjs_root_value_locations(context, return_values, function->js_out_argc);
-    }
+    if (function->js_out_argc > 1)
+        *js_rval = OBJECT_TO_JSVAL(JS_NewArrayObject(context, 0, NULL));
 
     /* Process out arguments and return values
        This loop is skipped if we fail the type conversion above, or
@@ -743,19 +739,27 @@ gjs_invoke_c_function(JSContext      *context,
     for (gi_arg_pos = -1; gi_arg_pos < gi_argc; gi_arg_pos++) {
         GjsArgumentCache *cache;
         GArgument *out_value;
+        jsval value;
 
         cache = &function->arguments[gi_arg_pos];
         out_value = &state.out_arg_cvalues[gi_arg_pos];
 
         if (!cache->marshal_out(context, cache,
                                 &state, out_value,
-                                &return_values[js_arg_pos])) {
+                                &value)) {
             failed = TRUE;
             break;
         }
 
-        if (!gjs_arg_cache_is_skip_out(cache))
+        if (!gjs_arg_cache_is_skip_out(cache)) {
+            if (function->js_out_argc == 1)
+                *js_rval = value;
+            else
+                JS_SetElement(context, JSVAL_TO_OBJECT(*js_rval),
+                              js_arg_pos, &value);
+
             js_arg_pos++;
+        }
     }
 
     g_assert(failed || did_throw_gerror || js_arg_pos == (guint8)function->js_out_argc);
@@ -790,28 +794,6 @@ gjs_invoke_c_function(JSContext      *context,
         failed = TRUE;
 
     g_assert_cmpuint(ffi_arg_pos, ==, processed_c_args + 1);
-
-    if (function->js_out_argc > 0 && (!failed && !did_throw_gerror)) {
-        /* if we have 1 return value or out arg, return that item
-         * on its own, otherwise return a JavaScript array with
-         * [return value, out arg 1, out arg 2, ...]
-         */
-        if (function->js_out_argc == 1) {
-            *js_rval = return_values[0];
-        } else {
-            JSObject *array;
-            array = JS_NewArrayObject(context,
-                                      function->js_out_argc,
-                                      return_values);
-            if (array == NULL) {
-                failed = TRUE;
-            } else {
-                *js_rval = OBJECT_TO_JSVAL(array);
-            }
-        }
-
-        gjs_unroot_value_locations(context, return_values, function->js_out_argc);
-    }
 
     if (!failed && did_throw_gerror) {
         gjs_throw_g_error(context, local_error);
