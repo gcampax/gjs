@@ -70,7 +70,12 @@ typedef struct _GjsArgumentCache {
             int closure;
             int destroy;
         } callback;
+        struct {
+            GITypeTag number_tag;
+            guint is_unsigned : 1;
+        } number;
         gsize caller_allocates_size;
+        guint string_is_filename : 1;
         gint dummy;
     } contents;
 } GjsArgumentCache;

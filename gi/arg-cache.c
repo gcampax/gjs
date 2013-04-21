@@ -31,6 +31,7 @@
 #include "gerror.h"
 #include "closure.h"
 #include "arg-cache.h"
+#include "gtype.h"
 #include <gjs/gjs-module.h>
 #include <gjs/compat.h>
 
@@ -41,6 +42,9 @@
 #include <unistd.h>
 #include <errno.h>
 #include <string.h>
+
+static JSBool gjs_arg_cache_build_normal_in_arg (GjsArgumentCache *self,
+                                                 GITypeTag         tag);
 
 /* The global entry point for any invocations of GDestroyNotify;
  * look up the callback through the user_data and then free it.
@@ -152,11 +156,11 @@ gjs_marshal_skipped_in (JSContext            *cx,
 }
 
 static JSBool
-gjs_marshal_normal_in_in (JSContext            *cx,
-                          GjsArgumentCache     *self,
-                          GjsFunctionCallState *state,
-                          GArgument            *arg,
-                          jsval                 value)
+gjs_marshal_generic_in_in (JSContext            *cx,
+                           GjsArgumentCache     *self,
+                           GjsFunctionCallState *state,
+                           GArgument            *arg,
+                           jsval                 value)
 {
     return gjs_value_to_g_argument(cx, value,
                                    &self->type_info,
@@ -170,13 +174,13 @@ gjs_marshal_normal_in_in (JSContext            *cx,
 }
 
 static JSBool
-gjs_marshal_normal_inout_in (JSContext           *cx,
-                             GjsArgumentCache     *self,
-                             GjsFunctionCallState *state,
-                             GArgument            *arg,
-                             jsval                 value)
+gjs_marshal_generic_inout_in (JSContext           *cx,
+                              GjsArgumentCache     *self,
+                              GjsFunctionCallState *state,
+                              GArgument            *arg,
+                              jsval                 value)
 {
-    if (!gjs_marshal_normal_in_in (cx, self, state, arg, value))
+    if (!gjs_marshal_generic_in_in (cx, self, state, arg, value))
         return JS_FALSE;
 
     state->out_arg_cvalues[self->arg_index] = state->inout_original_arg_cvalues[self->arg_index] = *arg;
@@ -300,11 +304,11 @@ gjs_marshal_callback_in (JSContext            *cx,
 }
 
 static JSBool
-gjs_marshal_normal_out_in (JSContext            *cx,
-                           GjsArgumentCache     *self,
-                           GjsFunctionCallState *state,
-                           GArgument            *arg,
-                           jsval                 value)
+gjs_marshal_generic_out_in (JSContext            *cx,
+                            GjsArgumentCache     *self,
+                            GjsFunctionCallState *state,
+                            GArgument            *arg,
+                            jsval                 value)
 {
     arg->v_pointer = &state->out_arg_cvalues[self->arg_index];
     return JS_TRUE;
@@ -337,11 +341,11 @@ gjs_marshal_skipped_out (JSContext            *cx,
 }
 
 static JSBool
-gjs_marshal_normal_out_out (JSContext            *cx,
-                            GjsArgumentCache     *self,
-                            GjsFunctionCallState *state,
-                            GArgument            *arg,
-                            jsval                *value)
+gjs_marshal_generic_out_out (JSContext            *cx,
+                             GjsArgumentCache     *self,
+                             GjsFunctionCallState *state,
+                             GArgument            *arg,
+                             jsval                *value)
 {
     return gjs_value_from_g_argument(cx, value,
                                      &self->type_info,
@@ -379,33 +383,33 @@ gjs_marshal_skipped_release (JSContext            *cx,
 }
 
 static JSBool
-gjs_marshal_normal_in_release (JSContext            *cx,
-                               GjsArgumentCache     *self,
-                               GjsFunctionCallState *state,
-                               GArgument            *in_arg,
-                               GArgument            *out_arg)
+gjs_marshal_generic_in_release (JSContext            *cx,
+                                GjsArgumentCache     *self,
+                                GjsFunctionCallState *state,
+                                GArgument            *in_arg,
+                                GArgument            *out_arg)
 {
     return gjs_g_argument_release_in_arg(cx, self->transfer,
                                          &self->type_info, in_arg);
 }
 
 static JSBool
-gjs_marshal_normal_out_release (JSContext            *cx,
-                                GjsArgumentCache     *self,
-                                GjsFunctionCallState *state,
-                                GArgument            *in_arg,
-                                GArgument            *out_arg)
+gjs_marshal_generic_out_release (JSContext            *cx,
+                                 GjsArgumentCache     *self,
+                                 GjsFunctionCallState *state,
+                                 GArgument            *in_arg,
+                                 GArgument            *out_arg)
 {
     return gjs_g_argument_release(cx, self->transfer,
                                   &self->type_info, out_arg);
 }
 
 static JSBool
-gjs_marshal_normal_inout_release (JSContext            *cx,
-                                  GjsArgumentCache     *self,
-                                  GjsFunctionCallState *state,
-                                  GArgument            *in_arg,
-                                  GArgument            *out_arg)
+gjs_marshal_generic_inout_release (JSContext            *cx,
+                                   GjsArgumentCache     *self,
+                                   GjsFunctionCallState *state,
+                                   GArgument            *in_arg,
+                                   GArgument            *out_arg)
 {
     GArgument *original_out_arg;
     /* For inout, transfer refers to what we get back from the function; for
@@ -418,7 +422,7 @@ gjs_marshal_normal_inout_release (JSContext            *cx,
                                        &self->type_info, original_out_arg))
         return JS_FALSE;
 
-    return gjs_marshal_normal_out_release(cx, self, state, in_arg, out_arg);
+    return gjs_marshal_generic_out_release(cx, self, state, in_arg, out_arg);
 }
 
 static JSBool
@@ -573,9 +577,9 @@ gjs_arg_cache_build_return (GjsArgumentCache *self,
                we need to do some basic initialization here.
             */
             arguments[array_length_pos].arg_index = array_length_pos;
-            arguments[array_length_pos].marshal_in = gjs_marshal_normal_out_in;
+            arguments[array_length_pos].marshal_in = gjs_marshal_generic_out_in;
 
-            self->marshal_in = gjs_marshal_normal_out_in;
+            self->marshal_in = gjs_marshal_generic_out_in;
             self->marshal_out = gjs_marshal_explicit_array_out_out;
             self->release = gjs_marshal_explicit_array_out_release;
 
@@ -592,8 +596,8 @@ gjs_arg_cache_build_return (GjsArgumentCache *self,
     /* marshal_in is ignored for the return value, but skip_in is not
        (it is used in the failure release path) */
     self->skip_in = TRUE;
-    self->marshal_out = gjs_marshal_normal_out_out;
-    self->release = gjs_marshal_normal_out_release;
+    self->marshal_out = gjs_marshal_generic_out_out;
+    self->release = gjs_marshal_generic_out_release;
 
     return JS_TRUE;
 }
@@ -653,7 +657,7 @@ gjs_arg_cache_build_arg (GjsArgumentCache *self,
         g_base_info_unref((GIBaseInfo*)interface_info);
 
         self->marshal_in = gjs_marshal_caller_allocates_in;
-        self->marshal_out = gjs_marshal_normal_out_out;
+        self->marshal_out = gjs_marshal_generic_out_out;
         self->release = gjs_marshal_caller_allocates_release;
         self->contents.caller_allocates_size = size;
 
@@ -735,9 +739,9 @@ gjs_arg_cache_build_arg (GjsArgumentCache *self,
                    we need to do some basic initialization here.
                 */
                 arguments[array_length_pos].arg_index = array_length_pos;
-                arguments[array_length_pos].marshal_in = gjs_marshal_normal_out_in;
+                arguments[array_length_pos].marshal_in = gjs_marshal_generic_out_in;
 
-                self->marshal_in = gjs_marshal_normal_out_in;
+                self->marshal_in = gjs_marshal_generic_out_in;
                 self->marshal_out = gjs_marshal_explicit_array_out_out;
                 self->release = gjs_marshal_explicit_array_out_release;
             }
@@ -758,17 +762,336 @@ gjs_arg_cache_build_arg (GjsArgumentCache *self,
     }
 
     if (direction == GI_DIRECTION_IN) {
-        self->marshal_in = gjs_marshal_normal_in_in;
+        gjs_arg_cache_build_normal_in_arg(self, type_tag);
         self->marshal_out = gjs_marshal_skipped_out;
-        self->release = gjs_marshal_normal_in_release;
     } else if (direction == GI_DIRECTION_INOUT) {
-        self->marshal_in = gjs_marshal_normal_inout_in;
-        self->marshal_out = gjs_marshal_normal_out_out;
-        self->release = gjs_marshal_normal_inout_release;
+        self->marshal_in = gjs_marshal_generic_inout_in;
+        self->marshal_out = gjs_marshal_generic_out_out;
+        self->release = gjs_marshal_generic_inout_release;
     } else {
-        self->marshal_in = gjs_marshal_normal_out_in;
-        self->marshal_out = gjs_marshal_normal_out_out;
-        self->release = gjs_marshal_normal_out_release;
+        self->marshal_in = gjs_marshal_generic_out_in;
+        self->marshal_out = gjs_marshal_generic_out_out;
+        self->release = gjs_marshal_generic_out_release;
+    }
+
+    return JS_TRUE;
+}
+
+static JSBool
+report_primitive_type_mismatch(JSContext        *cx,
+                               GjsArgumentCache *self,
+                               jsval             value,
+                               JSType            expected)
+{
+    gjs_throw(cx, "Expected type %s for argument '%s' but got type %s",
+              JS_GetTypeName(cx, expected), self->arg_name,
+              JS_GetTypeName(cx, JS_TypeOfValue(cx, value)));
+    return JS_FALSE;
+}
+
+static JSBool
+report_out_of_range(JSContext        *cx,
+                    GjsArgumentCache *self,
+                    GITypeTag         tag)
+{
+    gjs_throw(cx, "Argument %s: value is out of range for %s",
+              self->arg_name, g_type_tag_to_string(tag));
+    return JS_FALSE;
+}
+
+static JSBool
+report_invalid_null(JSContext        *cx,
+                    GjsArgumentCache *self)
+{
+    gjs_throw(cx, "Argument %s may not be null", self->arg_name);
+    return JS_FALSE;
+}
+
+static JSBool
+gjs_marshal_null_in_in (JSContext            *cx,
+                        GjsArgumentCache     *self,
+                        GjsFunctionCallState *state,
+                        GArgument            *arg,
+                        jsval                 value)
+{
+    arg->v_pointer = NULL;
+    return JS_TRUE;
+}
+
+static JSBool
+gjs_marshal_boolean_in_in (JSContext            *cx,
+                           GjsArgumentCache     *self,
+                           GjsFunctionCallState *state,
+                           GArgument            *arg,
+                           jsval                 value)
+{
+    JSBool b;
+
+    if (!JS_ValueToBoolean(cx, value, &b))
+        return JS_FALSE;
+
+    arg->v_boolean = b;
+    return JS_TRUE;
+}
+
+/* Type tags are alternated, signed / unsigned */
+static gint32 min_max_ints[5][2] = {
+    { G_MININT8,  G_MAXINT8 },
+    { 0,          G_MAXUINT8 },
+    { G_MININT16, G_MAXINT16 },
+    { 0,          G_MAXUINT16 },
+    { G_MININT32, G_MAXINT32 }
+};
+
+static inline JSBool
+value_in_range(gint32    number,
+               GITypeTag tag)
+{
+    return (number >= min_max_ints[tag - GI_TYPE_TAG_INT8][0] &&
+            number <= min_max_ints[tag - GI_TYPE_TAG_INT8][1]);
+}
+
+static JSBool
+gjs_marshal_integer_in_in (JSContext            *cx,
+                           GjsArgumentCache     *self,
+                           GjsFunctionCallState *state,
+                           GArgument            *arg,
+                           jsval                 value)
+{
+    GITypeTag tag;
+
+    tag = self->contents.number.number_tag;
+
+    if (self->contents.number.is_unsigned) {
+        guint32 number;
+
+        if (!JS_ValueToECMAUint32(cx, value, &number))
+            return JS_FALSE;
+
+        if (!value_in_range(number, tag))
+            return report_out_of_range(cx, self, tag);
+
+        gjs_g_argument_set_ulong(tag, arg, number);
+    } else {
+        gint32 number;
+
+        /* XXX:
+           The ToInt32() algorithm of ES5 says that conversion
+           of NaN (which include almost everything) produces 0,
+           but our test suite assumes that passing objects as
+           number fails, so we use the legacy conversion here.
+        */
+        if (!JS_ValueToInt32(cx, value, &number))
+            return JS_FALSE;
+
+        if (!value_in_range(number, tag))
+            return report_out_of_range(cx, self, tag);
+
+        gjs_g_argument_set_ulong(tag, arg, number);
+    }
+
+    return JS_TRUE;
+}
+
+static JSBool
+gjs_marshal_number_in_in (JSContext            *cx,
+                          GjsArgumentCache     *self,
+                          GjsFunctionCallState *state,
+                          GArgument            *arg,
+                          jsval                 value)
+{
+    double v;
+
+    if (!JS_ValueToNumber(cx, value, &v))
+        return JS_FALSE;
+
+    switch (self->contents.number.number_tag) {
+    case GI_TYPE_TAG_DOUBLE:
+        arg->v_double = v;
+        break;
+    case GI_TYPE_TAG_FLOAT:
+        if (v < - G_MAXFLOAT || v > G_MAXFLOAT)
+            return report_out_of_range(cx, self, GI_TYPE_TAG_FLOAT);
+
+        arg->v_float = v;
+        break;
+    case GI_TYPE_TAG_INT64:
+        if (v < G_MININT64 || v > G_MAXINT64)
+            return report_out_of_range(cx, self, GI_TYPE_TAG_INT64);
+
+        arg->v_int64 = v;
+        break;
+    case GI_TYPE_TAG_UINT64:
+        if (v < 0 || v > G_MAXUINT64)
+            return report_out_of_range(cx, self, GI_TYPE_TAG_UINT64);
+
+        arg->v_uint64 = v;
+        break;
+    case GI_TYPE_TAG_UINT32:
+        if (v < 0 || v > G_MAXUINT32)
+            return report_out_of_range(cx, self, GI_TYPE_TAG_UINT32);
+
+        arg->v_uint32 = v;
+        break;
+
+    default:
+        g_assert_not_reached();
+    }
+
+    return JS_TRUE;
+}
+
+static JSBool
+gjs_marshal_unichar_in_in (JSContext            *cx,
+                           GjsArgumentCache     *self,
+                           GjsFunctionCallState *state,
+                           GArgument            *arg,
+                           jsval                 value)
+{
+    if (!JSVAL_IS_STRING(value))
+        return report_primitive_type_mismatch(cx, self, value, JSTYPE_STRING);
+
+    return gjs_unichar_from_string(cx, value, &arg->v_uint32);
+}
+
+static JSBool
+gjs_marshal_gtype_in_in (JSContext            *cx,
+                         GjsArgumentCache     *self,
+                         GjsFunctionCallState *state,
+                         GArgument            *arg,
+                         jsval                 value)
+{
+    if (!JSVAL_IS_OBJECT(value))
+        return report_primitive_type_mismatch(cx, self, value, JSTYPE_OBJECT);
+    if (JSVAL_IS_NULL(value))
+        return report_invalid_null(cx, self);
+
+    arg->v_ssize = gjs_gtype_get_actual_gtype(cx, JSVAL_TO_OBJECT(value));
+    return arg->v_ssize != G_TYPE_INVALID;
+}
+
+static JSBool
+gjs_marshal_string_in_in (JSContext            *cx,
+                          GjsArgumentCache     *self,
+                          GjsFunctionCallState *state,
+                          GArgument            *arg,
+                          jsval                 value)
+{
+    char *str;
+    JSBool ok;
+
+    if (JSVAL_IS_NULL(value)) {
+        if (!self->nullable)
+            return report_invalid_null(cx, self);
+
+        arg->v_pointer = NULL;
+        return JS_TRUE;
+    }
+
+    if (!JSVAL_IS_STRING(value))
+        return report_primitive_type_mismatch(cx, self, value, JSTYPE_STRING);
+
+    if (self->contents.string_is_filename)
+        ok = gjs_string_to_filename(cx, value, &str);
+    else
+        ok = gjs_string_to_utf8(cx, value, &str);
+
+    arg->v_pointer = str;
+    return ok;
+}
+
+static JSBool
+gjs_marshal_string_in_release (JSContext            *cx,
+                               GjsArgumentCache     *self,
+                               GjsFunctionCallState *state,
+                               GArgument            *in_arg,
+                               GArgument            *out_arg)
+{
+    g_free(in_arg->v_pointer);
+    return JS_TRUE;
+}
+
+static JSBool
+gjs_arg_cache_build_normal_in_arg (GjsArgumentCache *self,
+                                   GITypeTag         tag)
+{
+    /* "Normal" in arguments are those arguments that don't
+       require special processing, and don't touch other
+       arguments.
+       Main categories are:
+       - void*
+       - small numbers (fit in 32bit)
+       - big numbers (need a double)
+       - strings
+       - enums/flags (different from numbers in the way
+         they're exposed in GI)
+       - objects (GObjects, boxed, unions, etc.)
+       - hashes
+       - sequences (null-terminated arrays, lists, etc.)
+    */
+
+    self->release = gjs_marshal_skipped_release;
+
+    switch (tag) {
+    case GI_TYPE_TAG_VOID:
+        self->marshal_in = gjs_marshal_null_in_in;
+        break;
+
+    case GI_TYPE_TAG_BOOLEAN:
+        self->marshal_in = gjs_marshal_boolean_in_in;
+        break;
+
+    case GI_TYPE_TAG_INT8:
+    case GI_TYPE_TAG_INT16:
+    case GI_TYPE_TAG_INT32:
+        self->marshal_in = gjs_marshal_integer_in_in;
+        self->contents.number.number_tag = tag;
+        self->contents.number.is_unsigned = FALSE;
+        break;
+
+    case GI_TYPE_TAG_UINT8:
+    case GI_TYPE_TAG_UINT16:
+        self->marshal_in = gjs_marshal_integer_in_in;
+        self->contents.number.number_tag = tag;
+        self->contents.number.is_unsigned = TRUE;
+        break;
+
+    case GI_TYPE_TAG_UINT32:
+    case GI_TYPE_TAG_INT64:
+    case GI_TYPE_TAG_UINT64:
+    case GI_TYPE_TAG_FLOAT:
+    case GI_TYPE_TAG_DOUBLE:
+        self->marshal_in = gjs_marshal_number_in_in;
+        self->contents.number.number_tag = tag;
+        break;
+
+    case GI_TYPE_TAG_UNICHAR:
+        self->marshal_in = gjs_marshal_unichar_in_in;
+        break;
+
+    case GI_TYPE_TAG_GTYPE:
+        self->marshal_in = gjs_marshal_gtype_in_in;
+        break;
+
+    case GI_TYPE_TAG_FILENAME:
+        self->marshal_in = gjs_marshal_string_in_in;
+        if (self->transfer != GI_TRANSFER_NOTHING)
+            self->release = gjs_marshal_string_in_release;
+        self->contents.string_is_filename = TRUE;
+        break;
+
+    case GI_TYPE_TAG_UTF8:
+        self->marshal_in = gjs_marshal_string_in_in;
+        if (self->transfer != GI_TRANSFER_NOTHING)
+            self->release = gjs_marshal_string_in_release;
+        self->contents.string_is_filename = FALSE;
+        break;
+
+    default:
+        /* FIXME */
+        /* Falling back to the generic marshaller */
+        self->marshal_in = gjs_marshal_generic_in_in;
+        self->release = gjs_marshal_generic_in_release;
     }
 
     return JS_TRUE;
