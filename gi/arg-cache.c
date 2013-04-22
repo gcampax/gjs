@@ -46,8 +46,10 @@
 #include <errno.h>
 #include <string.h>
 
-static JSBool gjs_arg_cache_build_normal_in_arg (GjsArgumentCache *self,
-                                                 GITypeTag         tag);
+static JSBool gjs_arg_cache_build_normal_in_arg    (GjsArgumentCache *self,
+                                                    GITypeTag         tag);
+static JSBool gjs_arg_cache_build_interface_in_arg (GjsArgumentCache *self,
+                                                    GIBaseInfo       *interface_info);
 
 /* The global entry point for any invocations of GDestroyNotify;
  * look up the callback through the user_data and then free it.
@@ -604,6 +606,38 @@ gjs_arg_cache_build_return (GjsArgumentCache *self,
 
     return JS_TRUE;
 }
+
+JSBool
+gjs_arg_cache_build_instance (GjsArgumentCache *self,
+                              GICallableInfo   *info)
+{
+    GIBaseInfo *interface_info;
+    JSBool ok;
+
+    interface_info = g_base_info_get_container((GIBaseInfo*) info);
+
+    self->arg_index = -2;
+    self->arg_name = "instance parameter";
+    /* XXX: This is actually wrong for some calls, like
+       g_dbus_method_invocation_return_value(), but the
+       information is not reported in the typelib
+    */
+    self->transfer = GI_TRANSFER_NOTHING;
+    /* Some calls accept null for the instance, but generally
+       in an object oriented language it's wrong to call a method
+       on null */
+    self->nullable = FALSE;
+    self->skip_out = TRUE;
+
+    /* Don't set marshal_out, it should not be called for the
+       instance parameter */
+    self->release = gjs_marshal_skipped_release;
+    ok = gjs_arg_cache_build_interface_in_arg(self, interface_info);
+
+    g_base_info_unref(interface_info);
+    return ok;
+}
+
 
 JSBool
 gjs_arg_cache_build_arg (GjsArgumentCache *self,
@@ -1400,16 +1434,13 @@ gjs_arg_cache_build_flags_mask (GjsArgumentCache *self,
 }
 
 static JSBool
-gjs_arg_cache_build_interface_in_arg (GjsArgumentCache *self)
+gjs_arg_cache_build_interface_in_arg (GjsArgumentCache *self,
+                                      GIBaseInfo       *interface_info)
 {
-    GIBaseInfo *interface_info;
     GIInfoType interface_type;
     GType gtype;
-    JSBool ok;
 
-    interface_info = g_type_info_get_interface(&self->type_info);
     interface_type = g_base_info_get_type(interface_info);
-    ok = JS_TRUE;
 
     /* We do some transfer magic later, so lets ensure we
        don't mess up. Should not happen in practice. */
@@ -1472,13 +1503,13 @@ gjs_arg_cache_build_interface_in_arg (GjsArgumentCache *self)
                 /* This is a smart marshaller, no release needed */
             } else {
                 /* Can't handle unions without a GType */
-                ok = JS_FALSE;
+                return JS_FALSE;
             }
         } else { /* generic boxed type */
             if (gtype == G_TYPE_NONE &&
                 self->transfer != GI_TRANSFER_NOTHING) {
                 /* Can't transfer ownership of a structure type not registered as a boxed */
-                ok = JS_FALSE;
+                return JS_FALSE;
             } else {
                 self->marshal_in = gjs_marshal_boxed_in_in;
                 /* This is a smart marshaller, no release needed */
@@ -1490,11 +1521,10 @@ gjs_arg_cache_build_interface_in_arg (GjsArgumentCache *self)
         /* Don't know how to handle this interface type
            (should not happen in practice, for typelibs emitted
            by g-ir-compiler) */
-        ok = JS_FALSE;
+        return JS_FALSE;
     }
 
-    g_base_info_unref(interface_info);
-    return ok;
+    return JS_TRUE;
 }
 
 static JSBool
@@ -1573,8 +1603,15 @@ gjs_arg_cache_build_normal_in_arg (GjsArgumentCache *self,
         self->contents.string_is_filename = FALSE;
         break;
 
-    case GI_TYPE_TAG_INTERFACE:
-        return gjs_arg_cache_build_interface_in_arg(self);
+    case GI_TYPE_TAG_INTERFACE: {
+        GIBaseInfo *interface_info;
+        JSBool ok;
+
+        interface_info = g_type_info_get_interface(&self->type_info);
+        ok = gjs_arg_cache_build_interface_in_arg(self, interface_info);
+        g_base_info_unref(interface_info);
+        return ok;
+    }
 
     case GI_TYPE_TAG_ARRAY:
     case GI_TYPE_TAG_GLIST:
