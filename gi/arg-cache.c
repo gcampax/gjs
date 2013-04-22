@@ -32,6 +32,9 @@
 #include "closure.h"
 #include "arg-cache.h"
 #include "gtype.h"
+#include "foreign.h"
+#include "value.h"
+#include <gjs/byteArray.h>
 #include <gjs/gjs-module.h>
 #include <gjs/compat.h>
 
@@ -790,6 +793,18 @@ report_primitive_type_mismatch(JSContext        *cx,
 }
 
 static JSBool
+report_object_primitive_type_mismatch(JSContext        *cx,
+                                      GjsArgumentCache *self,
+                                      jsval             value,
+                                      GType             expected)
+{
+    gjs_throw(cx, "Expected an object of type %s for argument '%s' but got type %s",
+              g_type_name(expected), self->arg_name,
+              JS_GetTypeName(cx, JS_TypeOfValue(cx, value)));
+    return JS_FALSE;
+}
+
+static JSBool
 report_out_of_range(JSContext        *cx,
                     GjsArgumentCache *self,
                     GITypeTag         tag)
@@ -1012,6 +1027,477 @@ gjs_marshal_string_in_release (JSContext            *cx,
 }
 
 static JSBool
+gjs_marshal_enum_in_in (JSContext            *cx,
+                        GjsArgumentCache     *self,
+                        GjsFunctionCallState *state,
+                        GArgument            *arg,
+                        jsval                 value)
+{
+    gint64 number;
+
+    if (!gjs_value_to_int64(cx, value, &number))
+        return JS_FALSE;
+
+    if (number > self->contents.enum_type.enum_max ||
+        number < self->contents.enum_type.enum_min) {
+        gjs_throw(cx, "%" G_GINT64_MODIFIER "d is not a valid value for enum argument %s",
+                  number, self->arg_name);
+        return JS_FALSE;
+    }
+
+    if (self->contents.enum_type.enum_max <= G_MAXINT32)
+        arg->v_int = number;
+    else if (self->contents.enum_type.enum_max <= G_MAXUINT32)
+        arg->v_uint = number;
+    else
+        arg->v_int64 = number;
+
+    return JS_TRUE;
+}
+
+static JSBool
+gjs_marshal_flags_in_in (JSContext            *cx,
+                         GjsArgumentCache     *self,
+                         GjsFunctionCallState *state,
+                         GArgument            *arg,
+                         jsval                 value)
+{
+    gint64 number;
+
+    if (!gjs_value_to_int64(cx, value, &number))
+        return JS_FALSE;
+
+    if (((guint64)number & self->contents.flags_mask) != (guint64)number) {
+        gjs_throw(cx, "%" G_GINT64_MODIFIER "d is not a valid value for enum argument %s",
+                  number, self->arg_name);
+        return JS_FALSE;
+    }
+
+    if (self->contents.flags_mask <= G_MAXUINT32)
+        arg->v_uint = number;
+    else
+        arg->v_uint64 = number;
+
+    return JS_TRUE;
+}
+
+static JSBool
+gjs_marshal_foreign_in_in (JSContext            *cx,
+                           GjsArgumentCache     *self,
+                           GjsFunctionCallState *state,
+                           GArgument            *arg,
+                           jsval                 value)
+{
+    GIStructInfo *foreign_info;
+
+    foreign_info = (GIStructInfo*) g_type_info_get_interface(&self->type_info);
+    self->contents.tmp_foreign_info = foreign_info;
+    return gjs_struct_foreign_convert_to_g_argument(cx, value, foreign_info,
+                                                    self->arg_name,
+                                                    GJS_ARGUMENT_ARGUMENT,
+                                                    self->transfer,
+                                                    self->nullable, arg);
+}
+
+static JSBool
+gjs_marshal_foreign_in_release (JSContext            *cx,
+                                GjsArgumentCache     *self,
+                                GjsFunctionCallState *state,
+                                GArgument            *in_arg,
+                                GArgument            *out_arg)
+{
+    JSBool ok;
+
+    if (self->transfer == GI_TRANSFER_NOTHING)
+        ok = gjs_struct_foreign_release_g_argument(cx, self->transfer,
+                                                   self->contents.tmp_foreign_info,
+                                                   in_arg);
+    else
+        ok = JS_TRUE;
+
+    g_base_info_unref((GIBaseInfo*) self->contents.tmp_foreign_info);
+    return ok;
+}
+
+static JSBool
+gjs_marshal_gvalue_in_in (JSContext            *cx,
+                          GjsArgumentCache     *self,
+                          GjsFunctionCallState *state,
+                          GArgument            *arg,
+                          jsval                 value)
+{
+    GValue gvalue = G_VALUE_INIT;
+
+    if (!gjs_value_to_g_value(cx, value, &gvalue))
+        return JS_FALSE;
+
+    arg->v_pointer = g_boxed_copy(G_TYPE_VALUE, &gvalue);
+
+    g_value_unset(&gvalue);
+    return JS_TRUE;
+}
+
+static JSBool
+gjs_marshal_boxed_in_in (JSContext            *cx,
+                         GjsArgumentCache     *self,
+                         GjsFunctionCallState *state,
+                         GArgument            *arg,
+                         jsval                 value)
+{
+    JSObject *object;
+    GType gtype;
+
+    if (JSVAL_IS_NULL(value)) {
+        if (!self->nullable)
+            return report_invalid_null(cx, self);
+
+        arg->v_pointer = NULL;
+        return JS_TRUE;
+    }
+
+    gtype = self->contents.object.gtype;
+
+    if (!JSVAL_IS_OBJECT(value))
+        return report_object_primitive_type_mismatch(cx, self,
+                                                     value, gtype);
+    object = JSVAL_TO_OBJECT(value);
+
+    if (gtype == G_TYPE_ERROR) {
+        if (!gjs_typecheck_gerror(cx, object, JS_TRUE))
+            return JS_FALSE;
+
+        arg->v_pointer = gjs_gerror_from_error(cx, object);
+    } else {
+        if (!gjs_typecheck_boxed(cx, object,
+                                 self->contents.object.info,
+                                 gtype, JS_TRUE))
+            return JS_FALSE;
+
+        arg->v_pointer = gjs_c_struct_from_boxed(cx, object);
+    }
+
+    if (self->transfer != GI_TRANSFER_NOTHING) {
+        g_assert(gtype != G_TYPE_NONE);
+
+        if (gtype == G_TYPE_VARIANT)
+            g_variant_ref(arg->v_pointer);
+        else
+            arg->v_pointer = g_boxed_copy(gtype, arg->v_pointer);
+    }
+
+    return JS_TRUE;
+}
+
+/* Unions include ClutterEvent and GdkEvent, which occur fairly
+   often in an interactive application, so they're worth a special
+   case in a different virtual function
+*/
+static JSBool
+gjs_marshal_union_in_in (JSContext            *cx,
+                         GjsArgumentCache     *self,
+                         GjsFunctionCallState *state,
+                         GArgument            *arg,
+                         jsval                 value)
+{
+    JSObject *object;
+    GType gtype;
+
+    if (JSVAL_IS_NULL(value)) {
+        if (!self->nullable)
+            return report_invalid_null(cx, self);
+
+        arg->v_pointer = NULL;
+        return JS_TRUE;
+    }
+
+    gtype = self->contents.object.gtype;
+    g_assert(gtype != G_TYPE_NONE);
+
+    if (!JSVAL_IS_OBJECT(value))
+        return report_object_primitive_type_mismatch(cx, self,
+                                                     value, gtype);
+    object = JSVAL_TO_OBJECT(value);
+
+    if (!gjs_typecheck_union(cx, object, self->contents.object.info,
+                             gtype, JS_TRUE))
+        return JS_FALSE;
+
+    arg->v_pointer = gjs_c_union_from_union(cx, object);
+
+    if (self->transfer != GI_TRANSFER_NOTHING)
+        arg->v_pointer = g_boxed_copy(gtype, arg->v_pointer);
+
+    return JS_TRUE;
+}
+
+static JSBool
+gjs_marshal_gclosure_in_in (JSContext            *cx,
+                            GjsArgumentCache     *self,
+                            GjsFunctionCallState *state,
+                            GArgument            *arg,
+                            jsval                 value)
+{
+    JSObject *object;
+
+    if (JSVAL_IS_NULL(value)) {
+        if (!self->nullable)
+            return report_invalid_null(cx, self);
+
+        arg->v_pointer = NULL;
+        return JS_TRUE;
+    }
+
+    if (!JSVAL_IS_OBJECT(value))
+        return report_primitive_type_mismatch(cx, self, value, JSTYPE_FUNCTION);
+    object = JSVAL_TO_OBJECT(value);
+
+    arg->v_pointer = gjs_closure_new_marshaled(cx, object, "boxed");
+    g_closure_ref(arg->v_pointer);
+    g_closure_sink(arg->v_pointer);
+
+    return JS_TRUE;
+}
+
+static JSBool
+gjs_marshal_gbytes_in_in (JSContext            *cx,
+                          GjsArgumentCache     *self,
+                          GjsFunctionCallState *state,
+                          GArgument            *arg,
+                          jsval                 value)
+{
+    JSObject *object;
+
+    if (JSVAL_IS_NULL(value)) {
+        if (!self->nullable)
+            return report_invalid_null(cx, self);
+
+        arg->v_pointer = NULL;
+        return JS_TRUE;
+    }
+
+    if (!JSVAL_IS_OBJECT(value))
+        return report_object_primitive_type_mismatch(cx, self,
+                                                     value, G_TYPE_BYTES);
+    object = JSVAL_TO_OBJECT(value);
+
+    if (gjs_typecheck_bytearray(cx, object, JS_FALSE)) {
+        arg->v_pointer = gjs_byte_array_get_bytes(cx, object);
+    } else {
+        if (!gjs_typecheck_boxed(cx, object, self->contents.object.info,
+                                 G_TYPE_BYTES, JS_TRUE))
+            return JS_FALSE;
+
+        arg->v_pointer = gjs_c_struct_from_boxed(cx, object);
+
+        /* The bytearray path is taking an extra ref irrespective
+           of transfer ownership, so we need to do the same here.
+        */
+        g_bytes_ref(arg->v_pointer);
+    }
+
+    return JS_TRUE;
+}
+
+static JSBool
+gjs_marshal_object_in_in (JSContext            *cx,
+                          GjsArgumentCache     *self,
+                          GjsFunctionCallState *state,
+                          GArgument            *arg,
+                          jsval                 value)
+{
+    JSObject *object;
+    GType gtype;
+
+    if (JSVAL_IS_NULL(value)) {
+        if (!self->nullable)
+            return report_invalid_null(cx, self);
+
+        arg->v_pointer = NULL;
+        return JS_TRUE;
+    }
+
+    gtype = self->contents.object.gtype;
+    g_assert(gtype != G_TYPE_NONE);
+
+    if (!JSVAL_IS_OBJECT(value))
+        return report_object_primitive_type_mismatch(cx, self,
+                                                     value, gtype);
+    object = JSVAL_TO_OBJECT(value);
+
+    if (!gjs_typecheck_object(cx, object, gtype, JS_TRUE))
+        return JS_FALSE;
+
+    arg->v_pointer = gjs_g_object_from_object(cx, object);
+
+    if (self->transfer != GI_TRANSFER_NOTHING)
+        g_object_ref(arg->v_pointer);
+
+    return JS_TRUE;
+}
+
+static JSBool
+gjs_marshal_boxed_in_release (JSContext            *cx,
+                               GjsArgumentCache     *self,
+                               GjsFunctionCallState *state,
+                               GArgument            *in_arg,
+                               GArgument            *out_arg)
+{
+    GType gtype;
+
+    gtype = self->contents.object.gtype;
+    g_assert(g_type_is_a(gtype, G_TYPE_BOXED));
+
+    g_boxed_free(gtype, in_arg->v_pointer);
+    return JS_TRUE;
+}
+
+static void
+gjs_arg_cache_build_enum_bounds (GjsArgumentCache *self,
+                                 GIEnumInfo       *enum_info)
+{
+    GIValueInfo *value_info;
+    int i, n;
+    gint64 value, min, max;
+
+    min = G_MAXINT64;
+    max = G_MININT64;
+    n = g_enum_info_get_n_values(enum_info);
+    for (i = 0; i < n; i++) {
+        value_info = g_enum_info_get_value(enum_info, i);
+        value = g_value_info_get_value(value_info);
+
+        if (value > max)
+            max = value;
+        if (value < min)
+            min = value;
+
+        g_base_info_unref((GIBaseInfo*) value_info);
+    }
+
+    self->contents.enum_type.enum_min = min;
+    self->contents.enum_type.enum_max = max;
+}
+
+static void
+gjs_arg_cache_build_flags_mask (GjsArgumentCache *self,
+                                GIEnumInfo       *enum_info)
+{
+    GIValueInfo *value_info;
+    int i, n;
+    guint64 value, mask;
+
+    mask = 0;
+    n = g_enum_info_get_n_values(enum_info);
+    for (i = 0; i < n; i++) {
+        value_info = g_enum_info_get_value(enum_info, i);
+        value = (guint64) g_value_info_get_value(value_info);
+        mask |= value;
+
+        g_base_info_unref((GIBaseInfo*) value_info);
+    }
+
+    self->contents.flags_mask = mask;
+}
+
+static JSBool
+gjs_arg_cache_build_interface_in_arg (GjsArgumentCache *self)
+{
+    GIBaseInfo *interface_info;
+    GIInfoType interface_type;
+    GType gtype;
+    JSBool ok;
+
+    interface_info = g_type_info_get_interface(&self->type_info);
+    interface_type = g_base_info_get_type(interface_info);
+    ok = JS_TRUE;
+
+    /* We do some transfer magic later, so lets ensure we
+       don't mess up. Should not happen in practice. */
+    if (G_UNLIKELY(self->transfer == GI_TRANSFER_CONTAINER))
+        return JS_FALSE;
+
+    switch (interface_type) {
+    case GI_INFO_TYPE_ENUM:
+        gjs_arg_cache_build_enum_bounds(self, (GIEnumInfo*) interface_info);
+        self->marshal_in = gjs_marshal_enum_in_in;
+        break;
+
+    case GI_INFO_TYPE_FLAGS:
+        gjs_arg_cache_build_flags_mask(self, (GIEnumInfo*) interface_info);
+        self->marshal_in = gjs_marshal_flags_in_in;
+        break;
+
+    case GI_INFO_TYPE_STRUCT:
+        if (g_struct_info_is_foreign((GIStructInfo*)interface_info)) {
+            self->marshal_in = gjs_marshal_foreign_in_in;
+            self->release = gjs_marshal_foreign_in_release;
+            break;
+        } else {
+            /* fall through */
+        }
+    case GI_INFO_TYPE_BOXED:
+    case GI_INFO_TYPE_OBJECT:
+    case GI_INFO_TYPE_INTERFACE:
+    case GI_INFO_TYPE_UNION:
+        gtype = g_registered_type_info_get_g_type
+            ((GIRegisteredTypeInfo*)interface_info);
+        self->contents.object.gtype = gtype;
+        self->contents.object.info = interface_info;
+        g_base_info_ref(self->contents.object.info);
+
+        /* Transfer handling is a bit complex here, because
+           some of our _in marshallers know not to copy stuff if we don't
+           need to.
+        */
+
+        if (gtype == G_TYPE_VALUE) {
+            self->marshal_in = gjs_marshal_gvalue_in_in;
+            if (self->transfer == GI_TRANSFER_NOTHING)
+                self->release = gjs_marshal_boxed_in_release;
+        } else if (gtype == G_TYPE_CLOSURE) {
+            self->marshal_in = gjs_marshal_gclosure_in_in;
+            if (self->transfer == GI_TRANSFER_NOTHING)
+                self->release = gjs_marshal_boxed_in_release;
+        } else if (gtype == G_TYPE_BYTES) {
+            self->marshal_in = gjs_marshal_gbytes_in_in;
+            if (self->transfer == GI_TRANSFER_NOTHING)
+                self->release = gjs_marshal_boxed_in_release;
+        } else if (g_type_is_a(gtype, G_TYPE_OBJECT) ||
+                   g_type_is_a(gtype, G_TYPE_INTERFACE)) {
+            self->marshal_in = gjs_marshal_object_in_in;
+            /* This is a smart marshaller, no release needed */
+        } else if (interface_type == GI_INFO_TYPE_UNION) {
+            if (gtype != G_TYPE_NONE) {
+                self->marshal_in = gjs_marshal_union_in_in;
+                /* This is a smart marshaller, no release needed */
+            } else {
+                /* Can't handle unions without a GType */
+                ok = JS_FALSE;
+            }
+        } else { /* generic boxed type */
+            if (gtype == G_TYPE_NONE &&
+                self->transfer != GI_TRANSFER_NOTHING) {
+                /* Can't transfer ownership of a structure type not registered as a boxed */
+                ok = JS_FALSE;
+            } else {
+                self->marshal_in = gjs_marshal_boxed_in_in;
+                /* This is a smart marshaller, no release needed */
+            }
+        }
+        break;
+
+    default:
+        /* Don't know how to handle this interface type
+           (should not happen in practice, for typelibs emitted
+           by g-ir-compiler) */
+        ok = JS_FALSE;
+    }
+
+    g_base_info_unref(interface_info);
+    return ok;
+}
+
+static JSBool
 gjs_arg_cache_build_normal_in_arg (GjsArgumentCache *self,
                                    GITypeTag         tag)
 {
@@ -1075,18 +1561,26 @@ gjs_arg_cache_build_normal_in_arg (GjsArgumentCache *self,
 
     case GI_TYPE_TAG_FILENAME:
         self->marshal_in = gjs_marshal_string_in_in;
-        if (self->transfer != GI_TRANSFER_NOTHING)
+        if (self->transfer == GI_TRANSFER_NOTHING)
             self->release = gjs_marshal_string_in_release;
         self->contents.string_is_filename = TRUE;
         break;
 
     case GI_TYPE_TAG_UTF8:
         self->marshal_in = gjs_marshal_string_in_in;
-        if (self->transfer != GI_TRANSFER_NOTHING)
+        if (self->transfer == GI_TRANSFER_NOTHING)
             self->release = gjs_marshal_string_in_release;
         self->contents.string_is_filename = FALSE;
         break;
 
+    case GI_TYPE_TAG_INTERFACE:
+        return gjs_arg_cache_build_interface_in_arg(self);
+
+    case GI_TYPE_TAG_ARRAY:
+    case GI_TYPE_TAG_GLIST:
+    case GI_TYPE_TAG_GSLIST:
+    case GI_TYPE_TAG_GHASH:
+    case GI_TYPE_TAG_ERROR:
     default:
         /* FIXME */
         /* Falling back to the generic marshaller */

@@ -61,22 +61,44 @@ typedef struct _GjsArgumentCache {
     guint       is_return : 1;
 
     union {
+        /* for explicit array only */
         struct {
             int length_arg;
             GITypeTag length_tag;
         } array;
+
         struct {
             GIScopeType scope;
             int closure;
             int destroy;
         } callback;
+
         struct {
             GITypeTag number_tag;
             guint is_unsigned : 1;
         } number;
-        gsize caller_allocates_size;
+
+        /* boxed / union / GObject */
+        struct {
+            GType gtype;
+            GIBaseInfo *info;
+        } object;
+
+        /* foreign structures */
+        GIStructInfo *tmp_foreign_info;
+
+        /* enum / flags */
+        struct {
+            gint64 enum_min;
+            gint64 enum_max;
+        } enum_type;
+        guint64 flags_mask;
+
+        /* string / filename */
         guint string_is_filename : 1;
-        gint dummy;
+
+        /* out caller allocates (FIXME: should be in object) */
+        gsize caller_allocates_size;
     } contents;
 } GjsArgumentCache;
 
