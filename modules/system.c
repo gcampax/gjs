@@ -114,7 +114,8 @@ gjs_exit(JSContext *context,
 {
     jsval *argv = JS_ARGV(cx, vp);
     gint32 ecode;
-    if (!gjs_parse_args(context, "exit", "i", argc, argv, &ecode))
+    if (!gjs_parse_args(context, "exit", "i", argc, argv,
+                        "exit_code", &ecode))
         return JS_FALSE;
     exit(ecode);
     return JS_TRUE;
