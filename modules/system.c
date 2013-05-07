@@ -26,6 +26,7 @@
 
 #include <sys/types.h>
 #include <unistd.h>
+#include <glib-unix.h>
 
 #include <gjs/gjs-module.h>
 #include <gi/object.h>
@@ -119,6 +120,47 @@ gjs_exit(JSContext *context,
     return JS_TRUE;
 }
 
+static JSBool
+gjs_exec(JSContext *context,
+         unsigned   argc,
+         jsval     *vp)
+{
+    jsval *argv = JS_ARGV(cx, vp);
+    jsval v;
+    JSObject *arg_array;
+    char **c_argv;
+    unsigned i;
+    GError *error;
+
+    if (!gjs_parse_args(context, "exec", "o", argc, argv,
+                        "argv", &arg_array))
+        return JS_FALSE;
+
+    if (!JS_GetArrayLength(context, arg_array, &argc))
+        return JS_FALSE;
+
+    c_argv = g_new0(char *, argc + 1);
+
+    for (i = 0; i < argc; i++) {
+        if (!JS_GetElement(context, arg_array, i, &v))
+            goto out;
+
+        if (!gjs_string_to_utf8(context, v, &c_argv[i]))
+            goto out;
+    }
+
+    execvp(c_argv[0], c_argv);
+
+    error = g_error_new(G_UNIX_ERROR, errno,
+                        "Failed to execute new program: %s", strerror(errno));
+    gjs_throw_g_error(context, error);
+    g_error_free(error);
+
+ out:
+    g_strfreev(c_argv);
+    return JS_FALSE;
+}
+
 JSBool
 gjs_js_define_system_stuff(JSContext *context,
                            JSObject  *module)
@@ -155,6 +197,12 @@ gjs_js_define_system_stuff(JSContext *context,
     if (!JS_DefineFunction(context, module,
                            "exit",
                            (JSNative) gjs_exit,
+                           0, GJS_MODULE_PROP_FLAGS))
+        return JS_FALSE;
+
+    if (!JS_DefineFunction(context, module,
+                           "exec",
+                           (JSNative) gjs_exec,
                            0, GJS_MODULE_PROP_FLAGS))
         return JS_FALSE;
 
