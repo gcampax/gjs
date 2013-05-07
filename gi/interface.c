@@ -116,7 +116,7 @@ interface_new_resolve(JSContext *context,
     if (!gjs_get_string_id(context, *id, &name))
         return JS_TRUE;
 
-    priv = priv_from_js(context, *obj);
+    priv = JS_GetPrivate(*obj);
 
     if (priv == NULL)
         goto out;

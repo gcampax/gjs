@@ -205,7 +205,7 @@ byte_array_get_prop(JSContext *context,
     ByteArrayInstance *priv;
     jsval id_value;
 
-    priv = priv_from_js(context, *obj);
+    priv = JS_GetPrivate(*obj);
 
     if (priv == NULL)
         return JS_TRUE; /* prototype, not an instance. */
@@ -237,7 +237,7 @@ byte_array_length_getter(JSContext *context,
     ByteArrayInstance *priv;
     gsize len = 0;
 
-    priv = priv_from_js(context, *obj);
+    priv = JS_GetPrivate(*obj);
 
     if (priv == NULL)
         return JS_TRUE; /* prototype, not an instance. */
@@ -259,7 +259,7 @@ byte_array_length_setter(JSContext *context,
     ByteArrayInstance *priv;
     gsize len = 0;
 
-    priv = priv_from_js(context, *obj);
+    priv = JS_GetPrivate(*obj);
 
     if (priv == NULL)
         return JS_TRUE; /* prototype, not instance */
@@ -319,7 +319,7 @@ byte_array_set_prop(JSContext *context,
     ByteArrayInstance *priv;
     jsval id_value;
 
-    priv = priv_from_js(context, *obj);
+    priv = JS_GetPrivate(*obj);
 
     if (priv == NULL)
         return JS_TRUE; /* prototype, not an instance. */
@@ -383,7 +383,7 @@ GJS_NATIVE_CONSTRUCTOR_DECLARE(byte_array)
 
     priv = g_slice_new0(ByteArrayInstance);
     priv->array = gjs_g_byte_array_new(preallocated_length);
-    g_assert(priv_from_js(context, object) == NULL);
+    g_assert(JS_GetPrivate(object) == NULL);
     JS_SetPrivate(object, priv);
 
     GJS_NATIVE_CONSTRUCTOR_FINISH(byte_array);
@@ -425,7 +425,7 @@ to_string_func(JSContext *context,
     gboolean encoding_is_utf8;
     gchar *data;
 
-    priv = priv_from_js(context, object);
+    priv = JS_GetPrivate(object);
 
     if (priv == NULL)
         return JS_TRUE; /* prototype, not instance */
@@ -522,7 +522,7 @@ to_gbytes_func(JSContext *context,
     JSObject *ret_bytes_obj;
     GIBaseInfo *gbytes_info;
 
-    priv = priv_from_js(context, object);
+    priv = JS_GetPrivate(object);
     if (priv == NULL)
         return JS_TRUE; /* prototype, not instance */
     
@@ -546,7 +546,7 @@ byte_array_new(JSContext *context)
 
     priv = g_slice_new0(ByteArrayInstance);
 
-    g_assert(priv_from_js(context, array) == NULL);
+    g_assert(JS_GetPrivate(array) == NULL);
     JS_SetPrivate(array, priv);
 
     return array;
@@ -571,7 +571,7 @@ from_string_func(JSContext *context,
 
     JS_AddObjectRoot(context, &obj);
 
-    priv = priv_from_js(context, obj);
+    priv = JS_GetPrivate(obj);
     g_assert (priv != NULL);
 
     g_assert(argc > 0); /* because we specified min args 1 */
@@ -676,7 +676,7 @@ from_array_func(JSContext *context,
 
     JS_AddObjectRoot(context, &obj);
 
-    priv = priv_from_js(context, obj);
+    priv = JS_GetPrivate(obj);
     g_assert (priv != NULL);
 
     g_assert(argc > 0); /* because we specified min args 1 */
@@ -749,7 +749,7 @@ from_gbytes_func(JSContext *context,
     obj = byte_array_new(context);
     if (obj == NULL)
         return JS_FALSE;
-    priv = priv_from_js(context, obj);
+    priv = JS_GetPrivate(obj);
     g_assert (priv != NULL);
 
     priv->bytes = g_bytes_ref(gbytes);
@@ -798,7 +798,7 @@ gjs_byte_array_from_byte_array (JSContext *context,
     }
 
     priv = g_slice_new0(ByteArrayInstance);
-    g_assert(priv_from_js(context, object) == NULL);
+    g_assert(JS_GetPrivate(object) == NULL);
     JS_SetPrivate(object, priv);
     priv->array = g_byte_array_new();
     priv->array->data = g_memdup(array->data, array->len);
@@ -827,7 +827,7 @@ gjs_byte_array_from_bytes (JSContext *context,
     }
 
     priv = g_slice_new0(ByteArrayInstance);
-    g_assert(priv_from_js(context, object) == NULL);
+    g_assert(JS_GetPrivate(object) == NULL);
     JS_SetPrivate(object, priv);
     priv->bytes = g_bytes_ref (bytes);
 
@@ -839,7 +839,7 @@ gjs_byte_array_get_bytes (JSContext  *context,
                           JSObject   *object)
 {
     ByteArrayInstance *priv;
-    priv = priv_from_js(context, object);
+    priv = JS_GetPrivate(object);
     g_assert(priv != NULL);
 
     byte_array_ensure_gbytes(priv);
@@ -852,7 +852,7 @@ gjs_byte_array_get_byte_array (JSContext   *context,
                                JSObject    *obj)
 {
     ByteArrayInstance *priv;
-    priv = priv_from_js(context, obj);
+    priv = JS_GetPrivate(obj);
     g_assert(priv != NULL);
 
     byte_array_ensure_array(priv);
@@ -867,7 +867,7 @@ gjs_byte_array_peek_data (JSContext  *context,
                           gsize      *out_len)
 {
     ByteArrayInstance *priv;
-    priv = priv_from_js(context, obj);
+    priv = JS_GetPrivate(obj);
     g_assert(priv != NULL);
     
     if (priv->array != NULL) {

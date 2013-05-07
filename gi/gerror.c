@@ -78,7 +78,7 @@ GJS_NATIVE_CONSTRUCTOR_DECLARE(error)
 
     GJS_INC_COUNTER(gerror);
 
-    g_assert(priv_from_js(context, object) == NULL);
+    g_assert(JS_GetPrivate(object) == NULL);
     JS_SetPrivate(object, priv);
 
     gjs_debug_lifecycle(GJS_DEBUG_GERROR,
@@ -92,7 +92,7 @@ GJS_NATIVE_CONSTRUCTOR_DECLARE(error)
      * If we are not the prototype, though, then we'll get ->info from the
      * prototype and then create a GObject if we don't have one already.
      */
-    proto_priv = priv_from_js(context, proto);
+    proto_priv = JS_GetPrivate(proto);
     if (proto_priv == NULL) {
         gjs_debug(GJS_DEBUG_GERROR,
                   "Bad prototype set on GError? Must match JSClass of object. JS error should have been reported.");
@@ -157,7 +157,7 @@ error_get_domain(JSContext *context, JSObject **obj, jsid *id, jsval *vp)
 {
     Error *priv;
 
-    priv = priv_from_js(context, *obj);
+    priv = JS_GetPrivate(*obj);
 
     if (priv == NULL)
         return JS_FALSE;
@@ -171,7 +171,7 @@ error_get_message(JSContext *context, JSObject **obj, jsid *id, jsval *vp)
 {
     Error *priv;
 
-    priv = priv_from_js(context, *obj);
+    priv = JS_GetPrivate(*obj);
 
     if (priv == NULL)
         return JS_FALSE;
@@ -190,7 +190,7 @@ error_get_code(JSContext *context, JSObject **obj, jsid *id, jsval *vp)
 {
     Error *priv;
 
-    priv = priv_from_js(context, *obj);
+    priv = JS_GetPrivate(*obj);
 
     if (priv == NULL)
         return JS_FALSE;
@@ -223,7 +223,7 @@ error_to_string(JSContext *context, unsigned argc, jsval *vp)
     }
 
     self = JSVAL_TO_OBJECT(v_self);
-    priv = priv_from_js(context, self);
+    priv = JS_GetPrivate(self);
 
     if (priv == NULL)
         return JS_FALSE;
@@ -289,7 +289,7 @@ error_constructor_value_of(JSContext *context, unsigned argc, jsval *vp)
         return JS_FALSE;
     }
 
-    priv = priv_from_js(context, JSVAL_TO_OBJECT(v_prototype));
+    priv = JS_GetPrivate(JSVAL_TO_OBJECT(v_prototype));
 
     if (priv == NULL)
         return JS_FALSE;
@@ -503,7 +503,7 @@ gjs_error_from_gerror(JSContext             *context,
                       g_base_info_get_name((GIBaseInfo *)info), gboxed);
 
     proto = gjs_lookup_generic_prototype(context, info);
-    proto_priv = priv_from_js(context, proto);
+    proto_priv = JS_GetPrivate(proto);
 
     obj = JS_NewObjectWithGivenProto(context,
                                      JS_GetClass(proto), proto,
@@ -538,7 +538,7 @@ gjs_gerror_from_error(JSContext    *context,
     if (gjs_typecheck_boxed (context, obj, NULL, G_TYPE_ERROR, JS_FALSE))
         return gjs_c_struct_from_boxed (context, obj);
 
-    priv = priv_from_js(context, obj);
+    priv = JS_GetPrivate(obj);
 
     if (priv == NULL)
         return NULL;

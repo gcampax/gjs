@@ -33,7 +33,7 @@
 
 GJS_DEFINE_PROTO_ABSTRACT("GIRepositoryGType", gtype);
 
-/* priv_from_js adds a "*", so this returns "void *" */
+/* JS_GetPrivate adds a "*", so this returns "void *" */
 GJS_DEFINE_PRIV_FROM_JS(void, gjs_gtype_class);
 
 static GQuark
@@ -72,7 +72,7 @@ to_string_func(JSContext *context,
     JSBool ret;
     jsval retval;
     
-    gtype = GPOINTER_TO_SIZE(priv_from_js(context, obj));
+    gtype = GPOINTER_TO_SIZE(JS_GetPrivate(obj));
 
     strval = g_strdup_printf("[object GType for '%s']",
                              g_type_name(gtype));
@@ -93,7 +93,7 @@ get_name_func (JSContext *context,
     JSBool ret;
     jsval retval;
 
-    gtype = GPOINTER_TO_SIZE(priv_from_js(context, *obj));
+    gtype = GPOINTER_TO_SIZE(JS_GetPrivate(*obj));
 
     ret = gjs_string_from_utf8(context, g_type_name(gtype), -1, &retval);
     if (ret)
@@ -155,7 +155,7 @@ _gjs_gtype_get_actual_gtype (JSContext *context,
 
     JS_BeginRequest(context);
     if (JS_InstanceOf(context, object, &gjs_gtype_class, NULL)) {
-        gtype = GPOINTER_TO_SIZE(priv_from_js(context, object));
+        gtype = GPOINTER_TO_SIZE(JS_GetPrivate(object));
         goto out;
     }
 

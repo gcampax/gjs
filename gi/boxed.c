@@ -133,7 +133,7 @@ boxed_new_resolve(JSContext *context,
     if (!gjs_get_string_id(context, *id, &name))
         return JS_TRUE; /* not resolved, but no error */
 
-    priv = priv_from_js(context, *obj);
+    priv = JS_GetPrivate(*obj);
     gjs_debug_jsprop(GJS_DEBUG_GBOXED, "Resolve prop '%s' hook obj %p priv %p", name, *obj, priv);
 
     if (priv == NULL)
@@ -443,7 +443,7 @@ GJS_NATIVE_CONSTRUCTOR_DECLARE(boxed)
 
     GJS_INC_COUNTER(boxed);
 
-    g_assert(priv_from_js(context, object) == NULL);
+    g_assert(JS_GetPrivate(object) == NULL);
     JS_SetPrivate(object, priv);
 
     gjs_debug_lifecycle(GJS_DEBUG_GBOXED,
@@ -456,7 +456,7 @@ GJS_NATIVE_CONSTRUCTOR_DECLARE(boxed)
      * If we are not the prototype, though, then we'll get ->info from the
      * prototype and then create a GObject if we don't have one already.
      */
-    proto_priv = priv_from_js(context, proto);
+    proto_priv = JS_GetPrivate(proto);
     if (proto_priv == NULL) {
         gjs_debug(GJS_DEBUG_GBOXED,
                   "Bad prototype set on boxed? Must match JSClass of object. JS error should have been reported.");
@@ -594,7 +594,7 @@ get_nested_interface_object (JSContext   *context,
     }
 
     proto = gjs_lookup_generic_prototype(context, (GIBoxedInfo*) interface_info);
-    proto_priv = priv_from_js(context, proto);
+    proto_priv = JS_GetPrivate(proto);
 
     offset = g_field_info_get_offset (field_info);
 
@@ -639,7 +639,7 @@ boxed_field_getter (JSContext            *context,
     GArgument arg;
     gboolean success = FALSE;
 
-    priv = priv_from_js(context, *obj._);
+    priv = JS_GetPrivate(*obj._);
     if (!priv)
         return JS_FALSE;
 
@@ -720,7 +720,7 @@ set_nested_interface_object (JSContext   *context,
     }
 
     proto = gjs_lookup_generic_prototype(context, (GIBoxedInfo*) interface_info);
-    proto_priv = priv_from_js(context, proto);
+    proto_priv = JS_GetPrivate(proto);
 
     /* If we can't directly copy from the source object we need
      * to construct a new temporary object.
@@ -730,7 +730,7 @@ set_nested_interface_object (JSContext   *context,
         if (!tmp_object)
             return JS_FALSE;
 
-        source_priv = priv_from_js(context, tmp_object);
+        source_priv = JS_GetPrivate(tmp_object);
         if (!source_priv)
             return JS_FALSE;
     }
@@ -818,7 +818,7 @@ boxed_field_setter (JSContext            *context,
     GIFieldInfo *field_info;
     gboolean success = FALSE;
 
-    priv = priv_from_js(context, *obj._);
+    priv = JS_GetPrivate(*obj._);
     if (!priv)
         return JS_FALSE;
     field_info = get_field_info(context, priv, *id._);
@@ -1213,7 +1213,7 @@ gjs_boxed_from_c_struct(JSContext             *context,
                       g_base_info_get_name((GIBaseInfo *)info), gboxed);
 
     proto = gjs_lookup_generic_prototype(context, info);
-    proto_priv = priv_from_js(context, proto);
+    proto_priv = JS_GetPrivate(proto);
 
     obj = JS_NewObjectWithGivenProto(context,
                                      JS_GetClass(proto), proto,
@@ -1261,7 +1261,7 @@ gjs_c_struct_from_boxed(JSContext    *context,
     if (obj == NULL)
         return NULL;
 
-    priv = priv_from_js(context, obj);
+    priv = JS_GetPrivate(obj);
     if (priv == NULL)
         return NULL;
 
@@ -1281,7 +1281,7 @@ gjs_typecheck_boxed(JSContext     *context,
     if (!do_base_typecheck(context, object, throw))
         return JS_FALSE;
 
-    priv = priv_from_js(context, object);
+    priv = JS_GetPrivate(object);
 
     if (priv->gboxed == NULL) {
         if (throw) {

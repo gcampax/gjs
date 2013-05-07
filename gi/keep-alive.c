@@ -198,7 +198,7 @@ print_roots (JSContext *context,
 
     JS_BeginRequest(context);
 
-    priv = priv_from_js(context, obj);
+    priv = JS_GetPrivate(obj);
 
     if (priv == NULL) /* prototype */
         return JS_TRUE;
@@ -318,7 +318,7 @@ gjs_keep_alive_new(JSContext *context)
     priv = g_slice_new0(KeepAlive);
     priv->children = g_hash_table_new_full(child_hash, child_equal, NULL, child_free);
 
-    g_assert(priv_from_js(context, keep_alive) == NULL);
+    g_assert(JS_GetPrivate(keep_alive) == NULL);
     JS_SetPrivate(keep_alive, priv);
 
     gjs_debug_lifecycle(GJS_DEBUG_KEEP_ALIVE,
@@ -343,7 +343,7 @@ gjs_keep_alive_add_child(JSContext         *context,
     g_assert(keep_alive != NULL);
 
     JS_BeginRequest(context);
-    priv = priv_from_js(context, keep_alive);
+    priv = JS_GetPrivate(keep_alive);
     JS_EndRequest(context);
 
     g_assert(priv != NULL);
@@ -376,7 +376,7 @@ gjs_keep_alive_remove_child(JSContext         *context,
     Child child;
 
     JS_BeginRequest(context);
-    priv = priv_from_js(context, keep_alive);
+    priv = JS_GetPrivate(keep_alive);
     JS_EndRequest(context);
 
     g_assert(priv != NULL);

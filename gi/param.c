@@ -86,7 +86,7 @@ param_get_prop(JSContext            *context,
     if (!gjs_get_string_id(context, *id._, &name))
         return JS_TRUE; /* not something we affect, but no error */
 
-    priv = priv_from_js(context, *obj._);
+    priv = JS_GetPrivate(*obj._);
 
     if (priv == NULL) {
         g_free(name);
@@ -573,7 +573,7 @@ gjs_g_param_from_param(JSContext    *context,
     if (obj == NULL)
         return NULL;
 
-    priv = priv_from_js(context, obj);
+    priv = JS_GetPrivate(obj);
 
     return priv->gparam;
 }
@@ -590,7 +590,7 @@ gjs_typecheck_param(JSContext     *context,
     if (!do_base_typecheck(context, object, throw))
         return JS_FALSE;
 
-    priv = priv_from_js(context, object);
+    priv = JS_GetPrivate(object);
 
     if (priv->gparam == NULL) {
         if (throw) {

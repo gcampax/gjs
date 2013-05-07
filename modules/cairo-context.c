@@ -264,7 +264,7 @@ _gjs_cairo_context_construct_internal(JSContext *context,
 
     priv = g_slice_new0(GjsCairoContext);
 
-    g_assert(priv_from_js(context, obj) == NULL);
+    g_assert(JS_GetPrivate(obj) == NULL);
     JS_SetPrivate(obj, priv);
 
     priv->context = context;
@@ -412,7 +412,7 @@ dispose_func(JSContext *context,
     JSObject *obj = JS_THIS_OBJECT(context, vp);
     GjsCairoContext *priv;
 
-    priv = priv_from_js(context, obj);
+    priv = JS_GetPrivate(obj);
     if (priv->cr != NULL) {
         cairo_destroy(priv->cr);
         priv->cr = NULL;
@@ -992,7 +992,7 @@ gjs_cairo_context_get_context(JSContext *context,
                               JSObject *object)
 {
     GjsCairoContext *priv;
-    priv = priv_from_js(context, object);
+    priv = JS_GetPrivate(object);
     if (priv == NULL)
         return NULL;
 

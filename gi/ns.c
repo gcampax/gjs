@@ -82,7 +82,7 @@ ns_new_resolve(JSContext *context,
         goto out;
     }
 
-    priv = priv_from_js(context, *obj);
+    priv = JS_GetPrivate(*obj);
     gjs_debug_jsprop(GJS_DEBUG_GNAMESPACE, "Resolve prop '%s' hook obj %p priv %p", name, *obj, priv);
 
     if (priv == NULL) {
@@ -230,12 +230,12 @@ ns_new(JSContext    *context,
 
     GJS_INC_COUNTER(ns);
 
-    g_assert(priv_from_js(context, ns) == NULL);
+    g_assert(JS_GetPrivate(ns) == NULL);
     JS_SetPrivate(ns, priv);
 
     gjs_debug_lifecycle(GJS_DEBUG_GNAMESPACE, "ns constructor, obj %p priv %p", ns, priv);
 
-    priv = priv_from_js(context, ns);
+    priv = JS_GetPrivate(ns);
     priv->repo = g_object_ref(repo);
     priv->namespace = g_strdup(ns_name);
 

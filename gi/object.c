@@ -246,10 +246,9 @@ init_g_param_from_property(JSContext  *context,
 }
 
 static inline ObjectInstance *
-proto_priv_from_js(JSContext *context,
-                   JSObject  *obj)
+proto_priv_from_js(JSObject  *obj)
 {
-    return priv_from_js(context, JS_GetPrototype(obj));
+    return JS_GetPrivate(JS_GetPrototype(obj));
 }
 
 /* a hook on getting a property; set value_p to override property's value.
@@ -271,7 +270,7 @@ object_instance_get_prop(JSContext            *context,
     if (!gjs_get_string_id(context, *id._, &name))
         return JS_TRUE; /* not resolved, but no error */
 
-    priv = priv_from_js(context, *obj._);
+    priv = JS_GetPrivate(*obj._);
     gjs_debug_jsprop(GJS_DEBUG_GOBJECT,
                      "Get prop '%s' hook obj %p priv %p", name, *obj._, priv);
 
@@ -341,7 +340,7 @@ object_instance_set_prop(JSContext            *context,
         goto set_custom;
     }
 
-    priv = priv_from_js(context, *obj._);
+    priv = JS_GetPrivate(*obj._);
     gjs_debug_jsprop(GJS_DEBUG_GOBJECT,
                      "Set prop '%s' hook obj %p priv %p", name, *obj._, priv);
 
@@ -520,7 +519,7 @@ object_instance_new_resolve(JSContext *context,
 
     *objp = NULL;
 
-    priv = priv_from_js(context, *obj);
+    priv = JS_GetPrivate(*obj);
 
     if (G_UNLIKELY (priv == NULL)) {
         /* We won't have a private until the initializer is called, so
@@ -852,7 +851,7 @@ handle_toggle_down(JSContext *context,
 
     obj = peek_js_obj(gobj);
 
-    priv = priv_from_js(context, obj);
+    priv = JS_GetPrivate(obj);
 
     gjs_debug_lifecycle(GJS_DEBUG_GOBJECT,
                         "Toggle notify gobj %p obj %p is_last_ref TRUE keep-alive %p",
@@ -899,7 +898,7 @@ handle_toggle_up(JSContext *context,
         goto out;
     }
 
-    priv = priv_from_js(context, obj);
+    priv = JS_GetPrivate(obj);
 
     gjs_debug_lifecycle(GJS_DEBUG_GOBJECT,
                         "Toggle notify gobj %p obj %p is_last_ref FALSEd keep-alive %p",
@@ -1112,13 +1111,13 @@ init_object_private (JSContext *context,
 
     GJS_INC_COUNTER(object);
 
-    g_assert(priv_from_js(context, object) == NULL);
+    g_assert(JS_GetPrivate(object) == NULL);
     JS_SetPrivate(object, priv);
 
     gjs_debug_lifecycle(GJS_DEBUG_GOBJECT,
                         "obj instance constructor, obj %p priv %p", object, priv);
 
-    proto_priv = proto_priv_from_js(context, object);
+    proto_priv = proto_priv_from_js(object);
     g_assert(proto_priv != NULL);
 
     priv->gtype = proto_priv->gtype;
@@ -1137,7 +1136,7 @@ associate_js_gobject (JSContext      *context,
 {
     ObjectInstance *priv;
 
-    priv = priv_from_js(context, object);
+    priv = JS_GetPrivate(object);
     priv->uses_toggle_ref = FALSE;
     priv->gobj = gobj;
 
@@ -1155,7 +1154,7 @@ ensure_uses_toggle_ref (JSContext *context,
 {
     ObjectInstance *priv;
 
-    priv = priv_from_js(context, object);
+    priv = JS_GetPrivate(object);
 
     if (priv->uses_toggle_ref)
         return;
@@ -1518,7 +1517,7 @@ real_connect_func(JSContext *context,
     if (!do_base_typecheck(context, obj, JS_TRUE))
         return JS_FALSE;
 
-    priv = priv_from_js(context, obj);
+    priv = JS_GetPrivate(obj);
     gjs_debug_gsignal("connect obj %p priv %p argc %d", obj, priv, argc);
     if (G_UNLIKELY (priv == NULL)) {
         throw_priv_is_null_error(context);
@@ -1631,7 +1630,7 @@ emit_func(JSContext *context,
     if (!do_base_typecheck(context, obj, JS_TRUE))
         return JS_FALSE;
 
-    priv = priv_from_js(context, obj);
+    priv = JS_GetPrivate(obj);
     gjs_debug_gsignal("emit obj %p priv %p argc %d", obj, priv, argc);
 
     if (G_UNLIKELY (priv == NULL)) {
@@ -1745,7 +1744,7 @@ to_string_func(JSContext *context,
     if (!do_base_typecheck(context, obj, JS_TRUE))
         goto out;
 
-    priv = priv_from_js(context, obj);
+    priv = JS_GetPrivate(obj);
 
     if (G_UNLIKELY (priv == NULL)) {
         throw_priv_is_null_error(context);
@@ -2034,7 +2033,7 @@ gjs_g_object_from_object(JSContext    *context,
     if (obj == NULL)
         return NULL;
 
-    priv = priv_from_js(context, obj);
+    priv = JS_GetPrivate(obj);
     return priv->gobj;
 }
 
@@ -2050,7 +2049,7 @@ gjs_typecheck_object(JSContext     *context,
     if (!do_base_typecheck(context, object, throw))
         return JS_FALSE;
 
-    priv = priv_from_js(context, object);
+    priv = JS_GetPrivate(object);
 
     if (G_UNLIKELY (priv == NULL)) {
         if (throw) {
@@ -2200,7 +2199,7 @@ gjs_hook_up_vfunc(JSContext *cx,
     if (!do_base_typecheck(cx, object, JS_TRUE))
         return JS_FALSE;
 
-    priv = priv_from_js(cx, object);
+    priv = JS_GetPrivate(object);
     gtype = priv->gtype;
     info = priv->info;
 
@@ -2504,7 +2503,7 @@ gjs_register_type(JSContext *cx,
         goto out;
     }
 
-    parent_priv = priv_from_js(cx, parent);
+    parent_priv = JS_GetPrivate(parent);
 
     /* We checked parent above, in do_base_typecheck() */
     g_assert(parent_priv != NULL);

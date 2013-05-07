@@ -753,7 +753,7 @@ importer_new_enumerate(JSContext  *context,
         if (id_p)
             *id_p = INT_TO_JSID(0);
 
-        priv = priv_from_js(context, *object);
+        priv = JS_GetPrivate(*object);
 
         if (!priv)
             /* we are enumerating the prototype properties */
@@ -949,7 +949,7 @@ importer_new_resolve(JSContext *context,
         strcmp(name, "toString") == 0 ||
         strcmp(name, "__iterator__") == 0)
         goto out;
-    priv = priv_from_js(context, *obj);
+    priv = JS_GetPrivate(*obj);
 
     gjs_debug_jsprop(GJS_DEBUG_IMPORTER, "Resolve prop '%s' hook obj %p priv %p", name, *obj, priv);
     if (priv == NULL) /* we are the prototype, or have the wrong class */
@@ -1067,7 +1067,7 @@ importer_new(JSContext *context,
 
     GJS_INC_COUNTER(importer);
 
-    g_assert(priv_from_js(context, importer) == NULL);
+    g_assert(JS_GetPrivate(importer) == NULL);
     JS_SetPrivate(importer, priv);
 
     gjs_debug_lifecycle(GJS_DEBUG_IMPORTER,

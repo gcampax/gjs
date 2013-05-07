@@ -79,7 +79,7 @@ union_new_resolve(JSContext *context,
     if (!gjs_get_string_id(context, *id, &name))
         return JS_TRUE; /* not resolved, but no error */
 
-    priv = priv_from_js(context, *obj);
+    priv = JS_GetPrivate(*obj);
     gjs_debug_jsprop(GJS_DEBUG_GBOXED, "Resolve prop '%s' hook obj %p priv %p", name, *obj, priv);
 
     if (priv == NULL) {
@@ -202,7 +202,7 @@ GJS_NATIVE_CONSTRUCTOR_DECLARE(union)
 
     GJS_INC_COUNTER(boxed);
 
-    g_assert(priv_from_js(context, object) == NULL);
+    g_assert(JS_GetPrivate(object) == NULL);
     JS_SetPrivate(object, priv);
 
     gjs_debug_lifecycle(GJS_DEBUG_GBOXED,
@@ -216,7 +216,7 @@ GJS_NATIVE_CONSTRUCTOR_DECLARE(union)
      * If we are not the prototype, though, then we'll get ->info from the
      * prototype and then create a GObject if we don't have one already.
      */
-    proto_priv = priv_from_js(context, proto);
+    proto_priv = JS_GetPrivate(proto);
     if (proto_priv == NULL) {
         gjs_debug(GJS_DEBUG_GBOXED,
                   "Bad prototype set on union? Must match JSClass of object. JS error should have been reported.");
@@ -449,7 +449,7 @@ gjs_c_union_from_union(JSContext    *context,
     if (obj == NULL)
         return NULL;
 
-    priv = priv_from_js(context, obj);
+    priv = JS_GetPrivate(obj);
 
     return priv->gboxed;
 }
@@ -467,7 +467,7 @@ gjs_typecheck_union(JSContext     *context,
     if (!do_base_typecheck(context, object, throw))
         return JS_FALSE;
 
-    priv = priv_from_js(context, object);
+    priv = JS_GetPrivate(object);
 
     if (priv->gboxed == NULL) {
         if (throw) {

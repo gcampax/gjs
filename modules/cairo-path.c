@@ -83,7 +83,7 @@ gjs_cairo_path_from_path(JSContext    *context,
 
     priv = g_slice_new0(GjsCairoPath);
 
-    g_assert(priv_from_js(context, object) == NULL);
+    g_assert(JS_GetPrivate(object) == NULL);
     JS_SetPrivate(object, priv);
 
     priv->context = context;

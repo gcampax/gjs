@@ -1191,7 +1191,7 @@ function_call(JSContext *context,
     Function *priv;
     jsval retval;
 
-    priv = priv_from_js(context, callee);
+    priv = JS_GetPrivate(callee);
     gjs_debug_marshal(GJS_DEBUG_GFUNCTION, "Call callee %p priv %p this obj %p %s", callee, priv,
                       obj, JS_GetTypeName(context,
                                           JS_TypeOfValue(context, OBJECT_TO_JSVAL(object))));
@@ -1251,7 +1251,7 @@ get_num_arguments (JSContext *context,
     jsval retval;
     Function *priv;
 
-    priv = priv_from_js(context, *obj);
+    priv = JS_GetPrivate(*obj);
 
     if (priv == NULL)
         return JS_FALSE;
@@ -1296,7 +1296,7 @@ function_to_string (JSContext *context,
         return JS_FALSE;
     }
 
-    priv = priv_from_js (context, self);
+    priv = JS_GetPrivate(self);
     if (priv == NULL) {
         string = "function () {\n}";
         free = FALSE;
@@ -1599,7 +1599,7 @@ function_new(JSContext      *context,
 
     GJS_INC_COUNTER(function);
 
-    g_assert(priv_from_js(context, function) == NULL);
+    g_assert(JS_GetPrivate(function) == NULL);
     JS_SetPrivate(function, priv);
 
     gjs_debug_lifecycle(GJS_DEBUG_GFUNCTION,

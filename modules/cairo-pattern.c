@@ -113,7 +113,7 @@ gjs_cairo_pattern_construct(JSContext       *context,
 
     priv = g_slice_new0(GjsCairoPattern);
 
-    g_assert(priv_from_js(context, object) == NULL);
+    g_assert(JS_GetPrivate(object) == NULL);
     JS_SetPrivate(object, priv);
 
     priv->context = context;

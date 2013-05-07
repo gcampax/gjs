@@ -178,7 +178,7 @@ repo_new_resolve(JSContext *context,
         strcmp(name, "toString") == 0)
         goto out;
 
-    priv = priv_from_js(context, *obj);
+    priv = JS_GetPrivate(*obj);
     gjs_debug_jsprop(GJS_DEBUG_GREPO, "Resolve prop '%s' hook obj %p priv %p", name, obj, priv);
 
     if (priv == NULL) /* we are the prototype, or have the wrong class */
@@ -298,7 +298,7 @@ repo_new(JSContext *context)
 
     GJS_INC_COUNTER(repo);
 
-    g_assert(priv_from_js(context, repo) == NULL);
+    g_assert(JS_GetPrivate(repo) == NULL);
     JS_SetPrivate(repo, priv);
 
     gjs_debug_lifecycle(GJS_DEBUG_GREPO,
