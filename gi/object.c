@@ -1423,9 +1423,9 @@ object_instance_finalize(JSFreeOp  *fop,
 }
 
 static JSObject *
-gjs_lookup_object_prototype_from_info(JSContext    *context,
-                                      GIObjectInfo *info,
-                                      GType         gtype)
+gjs_lookup_object_constructor_from_info(JSContext    *context,
+                                        GIObjectInfo *info,
+                                        GType         gtype)
 {
     JSObject *in_object;
     JSObject *constructor;
@@ -1459,6 +1459,22 @@ gjs_lookup_object_prototype_from_info(JSContext    *context,
     }
 
     g_assert(constructor != NULL);
+
+    return constructor;
+}
+
+static JSObject *
+gjs_lookup_object_prototype_from_info(JSContext    *context,
+                                      GIObjectInfo *info,
+                                      GType         gtype)
+{
+    JSObject *constructor;
+    jsval value;
+
+    constructor = gjs_lookup_object_constructor_from_info(context, info, gtype);
+
+    if (G_UNLIKELY (constructor == NULL))
+        return NULL;
 
     if (!gjs_object_get_property_const(context, constructor,
                                        GJS_STRING_PROTOTYPE, &value))
@@ -2701,5 +2717,31 @@ gjs_define_private_gi_stuff(JSContext *context,
                            6, GJS_MODULE_PROP_FLAGS))
         return JS_FALSE;
 
+    return JS_TRUE;
+}
+
+JSBool
+gjs_lookup_object_constructor(JSContext *context,
+                              GType      gtype,
+                              jsval     *value_p)
+{
+    JSObject *constructor;
+    GIObjectInfo *object_info;
+
+    object_info = (GIObjectInfo*)g_irepository_find_by_gtype(NULL, gtype);
+
+    g_assert(object_info == NULL ||
+             g_base_info_get_type((GIBaseInfo*)object_info) ==
+             GI_INFO_TYPE_OBJECT);
+
+    constructor = gjs_lookup_object_constructor_from_info(context, object_info, gtype);
+
+    if (G_UNLIKELY (constructor == NULL))
+        return JS_FALSE;
+
+    if (object_info)
+        g_base_info_unref((GIBaseInfo*)object_info);
+
+    *value_p = OBJECT_TO_JSVAL(constructor);
     return JS_TRUE;
 }
