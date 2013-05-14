@@ -2379,6 +2379,7 @@ gjs_object_custom_init(GTypeInstance *instance,
     JSContext *context;
     JSObject *object;
     ObjectInstance *priv;
+    jsval v, r;
 
     object = object_init_list->data;
     priv = JS_GetPrivate(object);
@@ -2401,6 +2402,19 @@ gjs_object_custom_init(GTypeInstance *instance,
     /* Custom JS objects will most likely have visible state, so
        just do this from the start */
     ensure_uses_toggle_ref(context, object);
+
+    if (!gjs_object_get_property_const(context, object,
+                                       GJS_STRING_INSTANCE_INIT, &v)) {
+        gjs_log_exception(context);
+        return;
+    }
+
+    if (!JSVAL_IS_OBJECT(v) || JSVAL_IS_NULL(v))
+        return;
+
+    if (!JS_CallFunctionValue(context, object, v,
+                              0, NULL, &r))
+        gjs_log_exception(context);
 }
 
 static inline void
