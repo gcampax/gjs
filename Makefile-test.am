@@ -39,3 +39,7 @@ TESTS_ENVIRONMENT =							\
 	GI_TYPELIB_PATH=$(builddir)					\
 	LD_LIBRARY_PATH="$(LD_LIBRARY_PATH):$(FIREFOX_JS_LIBDIR)"	\
 	G_FILENAME_ENCODING=latin1	# ensure filenames are not utf8
+
+# Other custom tests, not automated
+dist_noinst_DATA = \
+	test/interactive/testGtk.js

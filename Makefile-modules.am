@@ -6,7 +6,8 @@ dist_gjstweener_DATA =			\
 dist_gjsoverride_DATA = 		\
 	modules/overrides/GLib.js	\
 	modules/overrides/Gio.js	\
-	modules/overrides/GObject.js
+	modules/overrides/GObject.js	\
+	modules/overrides/Gtk.js
 
 dist_gjsjs_DATA +=		\
 	modules/gettext.js	\
