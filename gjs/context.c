@@ -1040,7 +1040,7 @@ gjs_context_eval(GjsContext *js_context,
     gjs_debug(GJS_DEBUG_CONTEXT,
               "Script evaluation succeeded");
 
-    if (gjs_log_exception(js_context->context)) {
+    if (success && gjs_log_exception(js_context->context)) {
         g_set_error(error,
                     GJS_ERROR,
                     GJS_ERROR_FAILED,

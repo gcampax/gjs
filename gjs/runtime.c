@@ -47,7 +47,7 @@ static const char *const_strings[] = {
     "__gjsKeepAlive", "__gjsPrivateNS",
     "gi", "versions", "overrides",
     "_init", "_instance_init", "_new_internal", "new",
-    "message", "code", "stack", "fileName", "lineNumber"
+    "message", "code", "stack", "fileName", "lineNumber", "name"
 };
 
 G_STATIC_ASSERT(G_N_ELEMENTS(const_strings) == GJS_STRING_LAST);
